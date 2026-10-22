@@ -1,0 +1,7 @@
+/*
+!/.gitignore
+!/MyApplication.cpp
+!/Media/
+/Media/*
+!/Media/Pool/
+!/Media/Pool/**
