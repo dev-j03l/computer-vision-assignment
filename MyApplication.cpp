@@ -27,6 +27,13 @@ struct TableGeometry
     double maxRadiusPx = 0;
 };
 
+struct ForegroundResult
+{
+    Mat difference;   // colour difference map
+    Mat mask;         // binary mask
+    double threshold = 0;
+};
+
 // Function Declarations
 void saveStage(const string& imageName, const string& stageName, const Mat& image);
 Point2f mapPoint(const Mat& homography, const Point2f& p);
@@ -37,6 +44,7 @@ Mat makeTableMask(const Size& imageSize, const TableGeometry& g);
 Mat rectify(const Mat& image, const TableGeometry& g);
 int oddAtLeast(double value);
 double otsuThresholdInsideMask(const Mat& image8u, const Mat& mask);
+ForegroundResult computeForeground(const Mat& image, const Mat& tableMask, const TableGeometry& g, const string& name);
 
 
 void MyApplication()
@@ -68,6 +76,10 @@ void MyApplication()
         overlay.setTo(Scalar(0, 0, 255), tableMask == 0);
         addWeighted(image, 0.6, overlay, 0.4, 0, overlay);
         saveStage(name, "1_table_region", overlay);
+
+        ForegroundResult fg = computeForeground(image, tableMask, geometry, name);
+        cout << name << ": Otsu Threshold = " << fg.threshold
+        << ", foreground pixels = " << countNonZero(fg.mask) << endl;
     }
 }
 
@@ -196,5 +208,65 @@ double otsuThresholdInsideMask(const Mat& image8u, const Mat& mask)
             if (mask.at<uchar>(r, c)) values.push_back(image8u.at<uchar>(r,c));
 
     Mat valuesRow(1, (int)values.size(), CV_8U, values.data());
+    Mat dummy;
     return threshold(valuesRow, dummy, 0, 255, THRESH_BINARY | THRESH_OTSU);
+}
+
+/*
+Purpose: finds everything on the table that is not cloth. I compare each pixel with the local
+colour around it, so lighting gradient across the table wont matter. I return a difference map and 
+a cleaned mask.
+*/
+ForegroundResult computeForeground(const Mat& image, const Mat& tableMask, const TableGeometry& g, const string& name)
+{
+    ForegroundResult result;
+
+    // First i want to convert to Lab and blur to help with some noise
+    Mat lab;
+    cvtColor(image, lab, COLOR_BGR2Lab);
+    GaussianBlur(lab, lab, Size(5,5), 0);
+
+    // now we calculate the local cloth bg. a median on a window about 2 ball diameters
+    int backgroundKernel = oddAtLeast(4.0 * g.maxRadiusPx);
+    vector<Mat> labChannels, bgChannels(3);
+    split(lab, labChannels);
+    for (int c = 0; c < 3; c++)
+        medianBlur(labChannels[c], bgChannels[c], backgroundKernel);
+
+    // color difference from bg. sqrt(da^2 + db^2 + (w * dL)^2)
+    const double LIGHTNESS_WEIGHT = 0.5;
+    Mat dL, dA, dB;
+    subtract(labChannels[0], bgChannels[0], dL, noArray(), CV_32F);
+    subtract(labChannels[1], bgChannels[1], dA, noArray(), CV_32F);
+    subtract(labChannels[2], bgChannels[2], dB, noArray(), CV_32F);
+    Mat diff = dA.mul(dA) + dB.mul(dB) + (LIGHTNESS_WEIGHT * LIGHTNESS_WEIGHT) * dL.mul(dL);
+    sqrt(diff, diff);
+    diff.setTo(0, tableMask == 0);
+    result.difference = diff;
+    saveStage(name, "difference", diff);
+
+    // otsu threshold on the table pixels only
+    Mat diff8u;
+    diff.convertTo(diff8u, CV_8U);
+    result.threshold = otsuThresholdInsideMask(diff8u, tableMask);
+    Mat mask = (diff8u > result.threshold) & tableMask;
+    saveStage(name, "threshold", mask);
+
+    // some morphology based on the smallest ball in our image
+    // open to remove specks, then close to rejoin brokem balls (stripes, highlights)
+    int openSize = max(3, oddAtLeast(0.2 * g.minRadiusPx));
+    int closeSize = max(3, oddAtLeast(0.3 * g.minRadiusPx));
+    morphologyEx(mask, mask, MORPH_OPEN, getStructuringElement(MORPH_ELLIPSE, Size(openSize, openSize)));
+    morphologyEx(mask, mask, MORPH_CLOSE, getStructuringElement(MORPH_ELLIPSE, Size(closeSize, closeSize)));
+    saveStage(name, "morphology", mask);
+
+    // final part is to fill the holes, then to keep only the outer boundaries and draw solid
+    vector<vector<Point>> contours;
+    findContours(mask.clone(), contours, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+    Mat filled = Mat::zeros(mask.size(), CV_8U);
+    drawContours(filled, contours, -1, Scalar(255), FILLED);
+    result.mask = filled;
+    saveStage(name, "mask", filled);
+
+    return result;
 }
