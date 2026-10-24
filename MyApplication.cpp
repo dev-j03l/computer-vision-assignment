@@ -173,7 +173,7 @@ Mat rectify(const Mat& image, const TableGeometry& g)
 }
 
 /*
-For median filter. We need odd sizes for centre pixel. If im deriving a value that isnt odd
+Purpose: for median filter. We need odd sizes for centre pixel. If im deriving a value that isnt odd
 this ensures we make it odd
 */
 int oddAtLeast(double value)
