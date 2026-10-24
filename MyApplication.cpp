@@ -25,7 +25,9 @@ struct TableGeometry
 void saveStage(const string& imageName, const string& stageName, const Mat& image);
 Point2f mapPoint(const Mat& homography, const Point2f& p);
 double expectedRadiusAtTablePoint(const TableGeometry& g, const Point2f& tablePoint);
+double expectedRadiusAtImagePoint(const TableGeometry& g, const Point2f& imagePoint);
 TableGeometry makeTableGeometry();
+Mat makeTableMask(const Size& imageSize, const TableGeometry& g);
 
 
 void MyApplication()
@@ -61,11 +63,19 @@ Point2f mapPoint(const Mat& homography, const Point2f& p)
 Purpose: estimates how many pixels a balls radius will cover in the photo when a ball is at
 a given table position
 */
-double expectedRadiusAtTablePoint(const TableGeometry&. g, const Point2f& tablePoint)
+double expectedRadiusAtTablePoint(const TableGeometry& g, const Point2f& tablePoint)
 {
     Point2f a = mapPoint(g.tableToImage, tablePoint - Point2f((float)BALL_RADIUS_MM, 0));
     Point2f b = mapPoint(g.tableToImage, tablePoint + Point2f((float)BALL_RADIUS_MM, 0));
     return 0.5 * norm(b - a);
+}
+
+/*
+Purpose: for taking the hough circles in photo co-ordinates back
+*/
+double expectedRadiusAtImagePoint(const TableGeometry& g, const Point2f& imagePoint)
+{
+    return expectedRadiusAtTablePoint(g, mapPoint(g.imageToTable, imagePoint));
 }
 
 TableGeometry makeTableGeometry()
