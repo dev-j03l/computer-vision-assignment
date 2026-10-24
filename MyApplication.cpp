@@ -35,6 +35,7 @@ double expectedRadiusAtImagePoint(const TableGeometry& g, const Point2f& imagePo
 TableGeometry makeTableGeometry();
 Mat makeTableMask(const Size& imageSize, const TableGeometry& g);
 Mat rectify(const Mat& image, const TableGeometry& g);
+int oddAtLeast(double value);
 
 
 void MyApplication()
@@ -169,4 +170,14 @@ Mat rectify(const Mat& image, const TableGeometry& g)
     Mat rectified;
     warpPerspective(image, rectified, g.imageToTable, Size(TABLE_WIDTH_MM, TABLE_HEIGHT_MM));
     return rectified;
+}
+
+/*
+For median filter. We need odd sizes for centre pixel. If im deriving a value that isnt odd
+this ensures we make it odd
+*/
+int oddAtLeast(double value)
+{
+    int k = (int)ceil(value);
+    return (k % 2 == 0) ? k + 1 : k;
 }
