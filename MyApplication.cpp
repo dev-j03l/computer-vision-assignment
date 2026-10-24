@@ -36,6 +36,7 @@ TableGeometry makeTableGeometry();
 Mat makeTableMask(const Size& imageSize, const TableGeometry& g);
 Mat rectify(const Mat& image, const TableGeometry& g);
 int oddAtLeast(double value);
+double otsuThresholdInsideMask(const Mat& image8u, const Mat& mask);
 
 
 void MyApplication()
@@ -180,4 +181,20 @@ int oddAtLeast(double value)
 {
     int k = (int)ceil(value);
     return (k % 2 == 0) ? k + 1 : k;
+}
+
+/*
+OpenCV Otsu thresholds the whole image, which would include the floor and make our
+threshold wrong. I want otsu to compute over the tables pixels only.
+*/
+double otsuThresholdInsideMask(const Mat& image8u, const Mat& mask)
+{
+    vector<uchar> values;
+    values.reserve(countNonZero(mask));
+    for (int r = 0; r < image8u.rows; r++)
+        for (int c = 0; c < image8u.cols; c++)
+            if (mask.at<uchar>(r, c)) values.push_back(image8u.at<uchar>(r,c));
+
+    Mat valuesRow(1, (int)values.size(), CV_8U, values.data());
+    return threshold(valuesRow, dummy, 0, 255, THRESH_BINARY | THRESH_OTSU);
 }
