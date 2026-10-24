@@ -184,7 +184,7 @@ int oddAtLeast(double value)
 }
 
 /*
-OpenCV Otsu thresholds the whole image, which would include the floor and make our
+Purpose: OpenCV Otsu thresholds the whole image, which would include the floor and make our
 threshold wrong. I want otsu to compute over the tables pixels only.
 */
 double otsuThresholdInsideMask(const Mat& image8u, const Mat& mask)
