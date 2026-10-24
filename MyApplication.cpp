@@ -111,3 +111,17 @@ TableGeometry makeTableGeometry()
 
     return g;
 }
+
+/*
+Purpose: creates the table mask using convexPoly
+*/
+Mat makeTableMask(const Size& imageSize, const TableGeometry& g)
+{
+    Mat mask = Mat::zeros(imageSize, CV_8U);
+    vector<Point> polygon;
+    for (const Point2f& p : g.imageCorners)
+        polygon.push_back(Point(cvRound(p.x), cvRound(p.y)));
+    
+    fillConvexPoly(mask, polygon, Scalar(255));
+    return mask;
+}
