@@ -9,7 +9,13 @@ using namespace cv;
 const int TABLE_WIDTH_MM = 1434;
 const int TABLE_HEIGHT_MM = 683;
 const double BALL_RADIUS_MM = 21.5;
-const string OUTPUT_FOLDER = "MEDIA/Pool/Output";
+const string OUTPUT_FOLDER = "Media/Pool/Output/";
+const string INPUT_FOLDER = "Media/Pool/";
+const vector<string> FILE_NAMES = {
+    "AllBalls.jpeg",
+    "Table1.jpeg", "Table2.jpeg", "Table3.jpeg",
+    "Table4.jpeg", "Table5.jpeg", "Table6.jpeg"
+};
 
 // Struct Declarations
 struct TableGeometry
@@ -28,10 +34,39 @@ double expectedRadiusAtTablePoint(const TableGeometry& g, const Point2f& tablePo
 double expectedRadiusAtImagePoint(const TableGeometry& g, const Point2f& imagePoint);
 TableGeometry makeTableGeometry();
 Mat makeTableMask(const Size& imageSize, const TableGeometry& g);
+Mat rectify(const Mat& image, const TableGeometry& g);
 
 
 void MyApplication()
 {
+    utils::fs::createDirectories(OUTPUT_FOLDER);
+
+    // We know that the camera is fixed so we only need to build geometry once
+    TableGeometry geometry = makeTableGeometry();
+    cout << "Expected ball radius: " << geometry.minRadiusPx << " px (far cushion) to "
+    << geometry.maxRadiusPx << " px (near cushion)" << endl;
+
+    for (const string& filename : FILE_NAMES)
+    {
+        Mat image = imread(INPUT_FOLDER + filename);
+        if (image.empty())
+        {
+            cout << "Could not open " << INPUT_FOLDER + filename << endl;
+            continue;
+        }
+        string name = filename.substr(0, filename.find('.'));
+
+        // Step 1: Get the table region and the rectified view
+        Mat tableMask = makeTableMask(image.size(), geometry);
+        Mat rectified = rectify(image, geometry);
+        saveStage(name, "1_rectified", rectified);
+
+        // Tinting everything outside the table to red to check the mask
+        Mat overlay = image.clone();
+        overlay.setTo(Scalar(0, 0, 255), tableMask == 0);
+        addWeighted(image, 0.6, overlay, 0.4, 0, overlay);
+        saveStage(name, "1_table_region", overlay);
+    }
 }
 
 /*
@@ -124,4 +159,14 @@ Mat makeTableMask(const Size& imageSize, const TableGeometry& g)
     
     fillConvexPoly(mask, polygon, Scalar(255));
     return mask;
+}
+
+/*
+Rectifies the image
+*/
+Mat rectify(const Mat& image, const TableGeometry& g)
+{
+    Mat rectified;
+    warpPerspective(image, rectified, g.imageToTable, Size(TABLE_WIDTH_MM, TABLE_HEIGHT_MM));
+    return rectified;
 }
