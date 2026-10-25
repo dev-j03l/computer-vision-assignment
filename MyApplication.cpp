@@ -34,6 +34,11 @@ struct ForegroundResult
     double threshold = 0;
 };
 
+struct BallCandidate{
+    Point2f imagePos;
+    float radiusPx = 0;
+};
+
 // Function Declarations
 void saveStage(const string& imageName, const string& stageName, const Mat& image);
 Point2f mapPoint(const Mat& homography, const Point2f& p);
@@ -45,7 +50,8 @@ Mat rectify(const Mat& image, const TableGeometry& g);
 int oddAtLeast(double value);
 double otsuThresholdInsideMask(const Mat& image8u, const Mat& mask);
 ForegroundResult computeForeground(const Mat& image, const Mat& tableMask, const TableGeometry& g, const string& name);
-
+vector<BallCandidate> findCandidates(const Mat& image, const Mat& tableMask, const TableGeometry& g, const string& name);
+void drawCandidates(const Mat& image, const vector<BallCandidates>& candidates, const string& name, const string& stageName);
 
 void MyApplication()
 {
@@ -77,9 +83,14 @@ void MyApplication()
         addWeighted(image, 0.6, overlay, 0.4, 0, overlay);
         saveStage(name, "1_table_region", overlay);
 
+        // Step 2: Computing the foreground
         ForegroundResult fg = computeForeground(image, tableMask, geometry, name);
         cout << name << ": Otsu Threshold = " << fg.threshold
         << ", foreground pixels = " << countNonZero(fg.mask) << endl;
+
+        // Step 3: Hough Circle candidates
+        vector<BallCandidate> candidates = findCandidates(image, tableMask, geometry, name);
+        cout << name << ": " << candidates.size() << " Hough candidates" << endl;
     }
 }
 
@@ -269,4 +280,17 @@ ForegroundResult computeForeground(const Mat& image, const Mat& tableMask, const
     saveStage(name, "2d_mask", filled);
 
     return result;
+}
+
+vector<BallCandidate> findCandidates(const Mat& image, const Mat& tableMask, const TableGeometry& g, const string& name)
+{
+    Mat grey;
+    cvtColor(image, grey, COLOR_BGR2GRAY);
+    medianBlur(grey, grey, 5);
+
+    const double CANNY_HIGH = 80;
+    Mat edges;
+    Canny(grey, edges, CANNY_HIGH/2, CANNY_HIGH);
+    saveStage(name, "3a_edges", edges);
+
 }
