@@ -37,6 +37,12 @@ struct ForegroundResult
 struct BallCandidate{
     Point2f imagePos;
     float radiusPx = 0;
+
+    Point2f tablePos;
+    double expectedRadiusPx = 0;
+    double foregroundFraction = 0;
+    double edgeSupport = 0;
+    double score = 0;
 };
 
 // Function Declarations
@@ -52,6 +58,7 @@ double otsuThresholdInsideMask(const Mat& image8u, const Mat& mask);
 ForegroundResult computeForeground(const Mat& image, const Mat& tableMask, const TableGeometry& g, const string& name);
 vector<BallCandidate> findCandidates(const Mat& image, const Mat& tableMask, const TableGeometry& g, const string& name);
 void drawCandidates(const Mat& image, const vector<BallCandidate>& candidates, const string& name, const string& stageName);
+Mat makeEdgeImage(const Mat& image, const TableGeometry& g);
 
 void MyApplication()
 {
@@ -336,4 +343,18 @@ void drawCandidates(const Mat& image, const vector<BallCandidate>& candidates, c
         circle(vis, b.imagePos, 2, Scalar(0, 255, 255), FILLED); // Yellow Centre Dot
     }
     saveStage(name, stageName, vis);
+}
+
+/*
+Purpose: Recreates the Hough Edges on a candidate, thickens edge by one pixel so circle thats off 
+still counts
+*/
+Mat makeEdgeImage(const Mat& image, const TableGeometry& g)
+{
+    Mat grey, edges;
+    cvtColor(image, grey, COLOR_BGR2GRAY);
+    medianBlur(grey, grey, 5);
+    Canny(grey, edges, 40, 80);
+    dilate(edges, edges, getStructuringElement(MORPH_ELLIPSE, Size(3, 3)));
+    return edges;
 }
