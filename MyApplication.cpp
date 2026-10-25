@@ -293,4 +293,12 @@ vector<BallCandidate> findCandidates(const Mat& image, const Mat& tableMask, con
     Canny(grey, edges, CANNY_HIGH/2, CANNY_HIGH);
     saveStage(name, "3a_edges", edges);
 
+    int minRadius = (int)floor(0.85 * g.minRadiusPx);
+    int maxRadius = (int)ceil(1.15 * g.maxRadiusPx);
+    double minDist = 1.5 * g.minRadiusPx;
+
+    const double ACCUMULATOR_THRESHOLD = 15;
+    vector<Vec3f> circles;
+    HoughCircles(grey, circles, HOUGH_GRADIENT, 1, minDist, CANNY_HIGH, ACCUMULATOR_THRESHOLD, minRadius, maxRadius);
+
 }
