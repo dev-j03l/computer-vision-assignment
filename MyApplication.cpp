@@ -29,8 +29,8 @@ struct TableGeometry
 
 struct ForegroundResult
 {
-    Mat difference;   // colour difference map
-    Mat mask;         // binary mask
+    Mat difference;
+    Mat mask;
     double threshold = 0;
 };
 
@@ -243,14 +243,14 @@ ForegroundResult computeForeground(const Mat& image, const Mat& tableMask, const
     sqrt(diff, diff);
     diff.setTo(0, tableMask == 0);
     result.difference = diff;
-    saveStage(name, "difference", diff);
+    saveStage(name, "2a_difference", diff);
 
     // otsu threshold on the table pixels only
     Mat diff8u;
     diff.convertTo(diff8u, CV_8U);
     result.threshold = otsuThresholdInsideMask(diff8u, tableMask);
     Mat mask = (diff8u > result.threshold) & tableMask;
-    saveStage(name, "threshold", mask);
+    saveStage(name, "2b_threshold", mask);
 
     // some morphology based on the smallest ball in our image
     // open to remove specks, then close to rejoin brokem balls (stripes, highlights)
@@ -258,7 +258,7 @@ ForegroundResult computeForeground(const Mat& image, const Mat& tableMask, const
     int closeSize = max(3, oddAtLeast(0.3 * g.minRadiusPx));
     morphologyEx(mask, mask, MORPH_OPEN, getStructuringElement(MORPH_ELLIPSE, Size(openSize, openSize)));
     morphologyEx(mask, mask, MORPH_CLOSE, getStructuringElement(MORPH_ELLIPSE, Size(closeSize, closeSize)));
-    saveStage(name, "morphology", mask);
+    saveStage(name, "2c_morphology", mask);
 
     // final part is to fill the holes, then to keep only the outer boundaries and draw solid
     vector<vector<Point>> contours;
@@ -266,7 +266,7 @@ ForegroundResult computeForeground(const Mat& image, const Mat& tableMask, const
     Mat filled = Mat::zeros(mask.size(), CV_8U);
     drawContours(filled, contours, -1, Scalar(255), FILLED);
     result.mask = filled;
-    saveStage(name, "mask", filled);
+    saveStage(name, "2d_mask", filled);
 
     return result;
 }
