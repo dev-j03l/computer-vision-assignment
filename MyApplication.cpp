@@ -61,6 +61,7 @@ void drawCandidates(const Mat& image, const vector<BallCandidate>& candidates, c
 Mat makeEdgeImage(const Mat& image, const TableGeometry& g);
 double foregroundFractionInCircle(const Mat& mask, const Point2f& centre, double radius);
 double edgeSupportOnCircle(const Mat& edges, const Point2f& centre, double radius);
+double distanceToNearestPocket(const Point2f& tablePos);
 
 void MyApplication()
 {
@@ -374,6 +375,9 @@ double foregroundFractionInCircle(const Mat& mask, const Point2f& centre, double
     return (double)countNonZero(mask & circleMask) / inside;
 }
 
+/*
+Purpose: walks around the outline every 5 degrees. counts points that land on edge
+*/
 double edgeSupportOnCircle(const Mat& edges, const Point2f& centre, double radius)
 {
     const int SAMPLES = 72;
@@ -388,4 +392,19 @@ double edgeSupportOnCircle(const Mat& edges, const Point2f& centre, double radiu
         if (edges.at<uchar>(y, x)) onEdge++;
     }
     return valid ? (double)onEdge / valid : 0;
+}
+
+/*
+Purpose: finds how far a table point is from the closest of the six pockets
+*/
+double distanceToNearestPocket(const Point2f& tablePos)
+{
+    const float W = (float)TABLE_WIDTH_MM, H = (float)TABLE_HEIGHT_MM;
+    const vector<Point2f> pockets = {
+        Point2f(0, 0), Point2f(W / 2, 0), Point2f(W, 0),
+        Point2f(0, H), Point2f(W / 2, H), Point2f(W, H)
+    };
+    double best = 1e9;
+    for (const Point2f& p : pockets) best = min(best, (double)norm(tablePos - p));
+    return best;
 }
