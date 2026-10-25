@@ -62,6 +62,7 @@ Mat makeEdgeImage(const Mat& image, const TableGeometry& g);
 double foregroundFractionInCircle(const Mat& mask, const Point2f& centre, double radius);
 double edgeSupportOnCircle(const Mat& edges, const Point2f& centre, double radius);
 double distanceToNearestPocket(const Point2f& tablePos);
+vector<BallCandidate> verifyCandidates(const vector<BallCandidate>& candidates, const Mat& image, ForegroundResult& fg, const TableGeometry& g, const string& name);
 
 void MyApplication()
 {
@@ -101,6 +102,10 @@ void MyApplication()
         // Step 3: Hough Circle candidates
         vector<BallCandidate> candidates = findCandidates(image, tableMask, geometry, name);
         cout << name << ": " << candidates.size() << " Hough candidates" << endl;
+
+        // Step 4: verification of circles
+        vector<BallCandidate> balls = verifyCandidates(candidates, image, fg, geometry, name);
+        cout << name << ": " << balls.size() << " balls after verification" << endl;
     }
 }
 
@@ -370,7 +375,7 @@ double foregroundFractionInCircle(const Mat& mask, const Point2f& centre, double
 {
     Mat circleMask = Mat::zeros(mask.size(), CV_8U);
     circle(circleMask, centre, cvRound(radius), Scalar(255), FILLED);
-    int inside = countNonZeros(circleMask);
+    int inside = countNonZero(circleMask);
     if (inside == 0) return 0;
     return (double)countNonZero(mask & circleMask) / inside;
 }
@@ -407,4 +412,57 @@ double distanceToNearestPocket(const Point2f& tablePos)
     double best = 1e9;
     for (const Point2f& p : pockets) best = min(best, (double)norm(tablePos - p));
     return best;
+}
+
+/*
+Purpose: this one attempts to remove the extra circels from step 3 and removes overlapping duplicates
+*/
+vector<BallCandidate> verifyCandidates(const vector<BallCandidate>& candidates, const Mat& image, ForegroundResult& fg, const TableGeometry& g, const string& name)
+{
+    Mat edges = makeEdgeImage(image, g);
+
+    const double RADIUS_TOLERANCE = 0.25;
+    const double MIN_FOREGROUND = 0.5;
+    const double MIN_EDGE_SUPPORT = 0.6;
+
+    vector<BallCandidate> passed;
+    for (BallCandidate b : candidates)
+    {
+        b.tablePos = mapPoint(g.imageToTable, b.imagePos);
+        b.expectedRadiusPx = expectedRadiusAtImagePoint(g, b.imagePos);
+
+        double sizeError = fabs(b.radiusPx - b.expectedRadiusPx) / b.expectedRadiusPx;
+        if (sizeError > RADIUS_TOLERANCE) continue;
+
+        if (b.tablePos.x < 0 || b.tablePos.x > TABLE_WIDTH_MM) continue;
+        if (b.tablePos.y < 0 || b.tablePos.y > TABLE_HEIGHT_MM) continue;
+
+        b.foregroundFraction = foregroundFractionInCircle(fg.mask, b.imagePos, b.expectedRadiusPx);
+        b.edgeSupport = edgeSupportOnCircle(edges, b.imagePos, b.radiusPx);
+        if (b.foregroundFraction < MIN_FOREGROUND && b.edgeSupport < MIN_EDGE_SUPPORT) continue;
+
+        const double POCKET_EXCLUSION_MM = 3 * BALL_RADIUS_MM;
+        if (distanceToNearestPocket(b.tablePos) < POCKET_EXCLUSION_MM) continue;
+
+        b.score = b.foregroundFraction + b.edgeSupport;
+        passed.push_back(b);
+    }
+
+    sort(passed.begin(), passed.end(), [](const BallCandidate& a, const BallCandidate& b){return a.score > b.score;});
+
+    vector<BallCandidate> balls;
+    for (const BallCandidate& b : passed)
+    {
+        bool duplicate = false;
+        for (const BallCandidate& kept : balls)
+        {
+            if (norm(b.imagePos - kept.imagePos) < 1.5 * b.expectedRadiusPx){
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate) balls.push_back(b);
+    }
+    drawCandidates(image, balls, name, "4_verified");
+    return balls;
 }
