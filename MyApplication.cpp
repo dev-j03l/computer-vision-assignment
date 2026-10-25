@@ -51,7 +51,7 @@ int oddAtLeast(double value);
 double otsuThresholdInsideMask(const Mat& image8u, const Mat& mask);
 ForegroundResult computeForeground(const Mat& image, const Mat& tableMask, const TableGeometry& g, const string& name);
 vector<BallCandidate> findCandidates(const Mat& image, const Mat& tableMask, const TableGeometry& g, const string& name);
-void drawCandidates(const Mat& image, const vector<BallCandidates>& candidates, const string& name, const string& stageName);
+void drawCandidates(const Mat& image, const vector<BallCandidate>& candidates, const string& name, const string& stageName);
 
 void MyApplication()
 {
@@ -301,4 +301,35 @@ vector<BallCandidate> findCandidates(const Mat& image, const Mat& tableMask, con
     vector<Vec3f> circles;
     HoughCircles(grey, circles, HOUGH_GRADIENT, 1, minDist, CANNY_HIGH, ACCUMULATOR_THRESHOLD, minRadius, maxRadius);
 
+    Mat allowed;
+    dilate(tableMask, allowed, getStructuringElement(MORPH_ELLIPSE, Size(oddAtLeast(2 * g.minRadiusPx), oddAtLeast(2* g.minRadiusPx))));
+    
+    vector<BallCandidate> candidates;
+    for (const Vec3f& c : circles)
+    {
+        Point centre(cvRound(c[0]), cvRound(c[1]));
+        if (centre.x < 0 || centre.y < 0 || centre.x >= allowed.cols || centre.y >= allowed.rows) continue;
+        if (allowed.at<uchar>(centre) == 0) continue;
+        BallCandidate b;
+        b.imagePos = Point2f(c[0], c[1]);
+        b.radiusPx = c[2];
+        candidates.push_back(b);
+    }
+
+    drawCandidates(image, candidates, name, "3b_candidates");
+    return candidates;
+}
+
+/*
+Purpose: Draws out the candidates onto the image and saves the image
+*/
+void drawCandidates(const Mat& image, const vector<BallCandidate>& candidates, const string& name, const string& stageName)
+{
+    Mat vis = image.clone();
+    for (const BallCandidate& b : candidates)
+    {
+        circle(vis, b.imagePos, cvRound(b.radiusPx), Scalar(0, 0, 255), 2); // red outline on circle
+        circle(vis, b.imagePos, 2, Scalar(0, 255, 255), FILLED); // Yellow Centre Dot
+    }
+    saveStage(name, stageName, vis);
 }
