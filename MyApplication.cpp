@@ -282,6 +282,10 @@ ForegroundResult computeForeground(const Mat& image, const Mat& tableMask, const
     return result;
 }
 
+/*
+Purpose: finds circles in the original photo using the edges. The threshold is intentionally low because we will
+filter out the bad ones later.
+*/
 vector<BallCandidate> findCandidates(const Mat& image, const Mat& tableMask, const TableGeometry& g, const string& name)
 {
     Mat grey;
