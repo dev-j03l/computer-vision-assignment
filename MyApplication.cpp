@@ -59,6 +59,8 @@ ForegroundResult computeForeground(const Mat& image, const Mat& tableMask, const
 vector<BallCandidate> findCandidates(const Mat& image, const Mat& tableMask, const TableGeometry& g, const string& name);
 void drawCandidates(const Mat& image, const vector<BallCandidate>& candidates, const string& name, const string& stageName);
 Mat makeEdgeImage(const Mat& image, const TableGeometry& g);
+double foregroundFractionInCircle(const Mat& mask, const Point2f& centre, double radius);
+double edgeSupportOnCircle(const Mat& edges, const Point2f& centre, double radius);
 
 void MyApplication()
 {
@@ -357,4 +359,33 @@ Mat makeEdgeImage(const Mat& image, const TableGeometry& g)
     Canny(grey, edges, 40, 80);
     dilate(edges, edges, getStructuringElement(MORPH_ELLIPSE, Size(3, 3)));
     return edges;
+}
+
+/*
+Purpose: draws a filled circle as a temporary mask, then counts the overlap with &
+asks what fraction of circle is marked as non cloth
+*/
+double foregroundFractionInCircle(const Mat& mask, const Point2f& centre, double radius)
+{
+    Mat circleMask = Mat::zeros(mask.size(), CV_8U);
+    circle(circleMask, centre, cvRound(radius), Scalar(255), FILLED);
+    int inside = countNonZeros(circleMask);
+    if (inside == 0) return 0;
+    return (double)countNonZero(mask & circleMask) / inside;
+}
+
+double edgeSupportOnCircle(const Mat& edges, const Point2f& centre, double radius)
+{
+    const int SAMPLES = 72;
+    int onEdge = 0, valid = 0;
+    for (int i = 0; i < SAMPLES; i++)
+    {
+        double angle = 2.0 * CV_PI * i / SAMPLES;
+        int x = cvRound(centre.x + radius * cos(angle));
+        int y = cvRound(centre.y + radius * sin(angle));
+        if (x < 0 || y < 0 || x >= edges.cols || y >= edges.rows) continue;
+        valid++;
+        if (edges.at<uchar>(y, x)) onEdge++;
+    }
+    return valid ? (double)onEdge / valid : 0;
 }
