@@ -76,7 +76,7 @@ double foregroundFractionInCircle(const Mat& mask, const Point2f& centre, double
 double edgeSupportOnCircle(const Mat& edges, const Point2f& centre, double radius);
 double distanceToNearestPocket(const Point2f& tablePos);
 vector<BallCandidate> verifyCandidates(const vector<BallCandidate>& candidates, const Mat& image, ForegroundResult& fg, const TableGeometry& g, const string& name);
-
+vector<GroundTruthBall> getGroundTruth(const string& name);
 
 void MyApplication()
 {
@@ -479,4 +479,66 @@ vector<BallCandidate> verifyCandidates(const vector<BallCandidate>& candidates, 
     }
     drawCandidates(image, balls, name, "4_verified");
     return balls;
+}
+
+/*
+Purpose: get ground truth from excel. 
+*/
+vector<GroundTruthBall> getGroundTruth(const string& name)
+{
+    const vector<string> names = {"AllBalls", "Table1", "Table2", "Table3", "Table4", "Table5", "Table6"};
+    // {x, y} for ball 1, 2, ..., 15, white
+    const int data[7][16][2] = {
+        // AllBalls
+        { {908,253},{959,250},{1013,255},{1072,256},{1132,254},{1184,262},{1244,256},{1307,253},
+          {901,329},{961,330},{1130,334},{1013,335},{1067,336},{1245,342},{1187,345},{797,293} },
+        // Table1
+        { {1092,309},{1212,429},{1174,353},{1050,335},{1211,285},{1170,261},{1173,352},{1132,331},
+          {1210,240},{1170,310},{1169,407},{1135,281},{1212,374},{1091,360},{1213,331},{29,288} },
+        // Table2
+        { {1103,282},{1224,620},{1121,391},{1305,310},{1046,315},{621,202},{1173,361},{1132,331},
+          {725,177},{1269,185},{798,665},{438,296},{1235,53},{1090,362},{1205,399},{1169,507} },
+        // Table3
+        { {908,23},{1224,616},{1199,447},{29,336},{1406,305},{621,210},{1294,260},{1252,226},
+          {725,177},{1270,171},{798,665},{351,249},{1233,53},{901,169},{1201,399},{29,434} },
+        // Table4
+        { {908,23},{1407,546},{1204,444},{-1,-1},{1406,305},{621,210},{1294,260},{1252,226},
+          {724,181},{1270,171},{798,665},{351,249},{1231,58},{901,169},{1201,399},{1392,88} },
+        // Table5
+        { {23,535},{1407,546},{1204,444},{-1,-1},{1406,305},{25,131},{1294,260},{1252,226},
+          {72,538},{1270,171},{798,665},{351,249},{-1,-1},{901,169},{1201,399},{26,608} },
+        // Table6
+        { {23,535},{1364,477},{1204,444},{-1,-1},{1406,305},{25,131},{1294,260},{1252,226},
+          {72,538},{1270,171},{-1,-1},{351,249},{-1,-1},{901,169},{1201,399},{947,629} }
+    };
+
+    vector<GroundTruthBall> truth;
+    int index = (int)(find(names.begin(), names.end(), name) - names.begin());
+    if (index >= (int)names.size()) return truth;
+
+    for (int ball = 0; ball < 16; ball++)
+    {
+        int x = data[index][ball][0], y = data[index][ball][1];
+        if (x < 0) continue;
+        GroundTruthBall t;
+        t.number = (ball == 15) ? 0 : ball + 1;
+        t.tablePos = Point2f((float)x, (float)y);
+        
+        // every pos should be on table
+        if (x >= TABLE_WIDTH_MM || y >= TABLE_HEIGHT_MM)
+            cout << "Ground Truth Warning: " << name << " ball " << t.number << " (" << x << ", " << y << 
+            ") is outside the table" << endl;
+        
+        truth.push_back(t);
+    }
+
+    // check if two balls closer than one diameter
+    for (size_t i = 0; i < truth.size(); i++)
+        for (size_t j = 0; j < truth.size(); j++)
+            if (norm(truth[i].tablePos - truth[j].tablePos) < 2 * BALL_RADIUS_MM * 0.9)
+                cout << "Ground Truth Warning: " << name << " balls " << truth[i].number << " and "
+                << truth[j].number << " are only " << norm(truth[i].tablePos - truth[j].tablePos) 
+                << " mm apart (physically impossible)" << endl;
+    
+    return truth;
 }
