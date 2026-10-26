@@ -77,7 +77,8 @@ double edgeSupportOnCircle(const Mat& edges, const Point2f& centre, double radiu
 double distanceToNearestPocket(const Point2f& tablePos);
 vector<BallCandidate> verifyCandidates(const vector<BallCandidate>& candidates, const Mat& image, ForegroundResult& fg, const TableGeometry& g, const string& name);
 vector<GroundTruthBall> getGroundTruth(const string& name);
-EvaluationResult evaluateDetections(const vector<BallCandidates>& balls, const vector<GroundTruthBall>& truth, const Mat& rectified, const string& name);
+EvaluationResult evaluateDetections(const vector<BallCandidate>& balls, const vector<GroundTruthBall>& truth, const Mat& rectified, const string& name);
+void printEvaluation(const string& label, const EvaluationResult& r);
 
 void MyApplication()
 {
@@ -87,6 +88,8 @@ void MyApplication()
     TableGeometry geometry = makeTableGeometry();
     cout << "Expected ball radius: " << geometry.minRadiusPx << " px (far cushion) to "
     << geometry.maxRadiusPx << " px (near cushion)" << endl;
+
+    EvaluationResult total; // for step 6. summed over images
 
     for (const string& filename : FILE_NAMES)
     {
@@ -121,7 +124,24 @@ void MyApplication()
         // Step 4: verification of circles
         vector<BallCandidate> balls = verifyCandidates(candidates, image, fg, geometry, name);
         cout << name << ": " << balls.size() << " balls after verification" << endl;
+
+        // Step 6: Evaluation against GT
+        vector<GroundTruthBall> truth = getGroundTruth(name);
+        EvaluationResult r = evaluateDetections(balls, truth, rectified, name);
+        printEvaluation(name, r);
+
+        // overall total excluding allballs
+        if (name != "AllBalls")
+        {
+            total.truePositives += r.truePositives;
+            total.falsePositives += r.falsePositives;
+            total.falseNegatives += r.falseNegatives;
+            total.errorsMm.insert(total.errorsMm.end(), r.errorsMm.begin(), r.errorsMm.end());
+            total.errorVectors.insert(total.errorVectors.end(), r.errorVectors.begin(), r.errorVectors.end());
+        }
     }
+    cout << endl << "==================== STAGE 1 RESULTS ====================" << endl;
+    printEvaluation("ALL TEST IMAGES (TABLES 1-6)", total);
 }
 
 /*
@@ -471,7 +491,7 @@ vector<BallCandidate> verifyCandidates(const vector<BallCandidate>& candidates, 
         bool duplicate = false;
         for (const BallCandidate& kept : balls)
         {
-            if (norm(b.imagePos - kept.imagePos) < BALL_RADIUS_MM){
+            if (norm(b.tablePos - kept.tablePos) < BALL_RADIUS_MM){
                 duplicate = true;
                 break;
             }
@@ -535,7 +555,7 @@ vector<GroundTruthBall> getGroundTruth(const string& name)
 
     // check if two balls closer than one diameter
     for (size_t i = 0; i < truth.size(); i++)
-        for (size_t j = 0; j < truth.size(); j++)
+        for (size_t j = i+1; j < truth.size(); j++)
             if (norm(truth[i].tablePos - truth[j].tablePos) < 2 * BALL_RADIUS_MM * 0.9)
                 cout << "Ground Truth Warning: " << name << " balls " << truth[i].number << " and "
                 << truth[j].number << " are only " << norm(truth[i].tablePos - truth[j].tablePos) 
@@ -548,7 +568,7 @@ vector<GroundTruthBall> getGroundTruth(const string& name)
 Purpose: matches detections to Ground Truth, then counts TP / FP / FN and errors.
 We also do some filtering
 */
-EvaluationResult evaluateDetections(const vector<BallCandidates>& balls, const vector<GroundTruthBall>& truth, const Mat& rectified, const string& name)
+EvaluationResult evaluateDetections(const vector<BallCandidate>& balls, const vector<GroundTruthBall>& truth, const Mat& rectified, const string& name)
 {
     const double MATCH_TOLERANCE_MM = BALL_RADIUS_MM; //futher than one radius = not on the ball
     EvaluationResult r;
@@ -568,7 +588,7 @@ EvaluationResult evaluateDetections(const vector<BallCandidates>& balls, const v
     vector<int> detMatch(balls.size(), -1), gtMatch(truth.size(), -1);
     for (const Pair& p : pairs)
     {
-        if (detMatch[p.det] != -1 || gtMatch(p.gt) != -1) continue;
+        if (detMatch[p.det] != -1 || gtMatch[p.gt] != -1) continue;
         detMatch[p.det] = p.gt;
         gtMatch[p.gt] = p.det;
         r.errorsMm.push_back(p.dist);
@@ -602,4 +622,35 @@ EvaluationResult evaluateDetections(const vector<BallCandidates>& balls, const v
     }
     saveStage(name, "6_evaluation", vis);
     return r;
+}
+
+/*
+Purpose: prints precision, recall, F1 and position errors
+Precision = TP / (TP + FP) // how many were real balls
+Recall = TP / (TP + FN) // how many real balls were found
+*/
+void printEvaluation(const string& label, const EvaluationResult& r)
+{
+    double precision = (r.truePositives + r.falsePositives) ? (double)r.truePositives / (r.truePositives + r.falsePositives) : 0;
+    double recall = (r.truePositives + r.falseNegatives) ? (double)r.truePositives / (r.truePositives + r.falseNegatives) : 0;
+    double f1 = (precision + recall) ? 2 * precision * recall / (precision + recall) : 0;
+
+    double meanErr = 0, rmsErr = 0, maxErr = 0;
+    Point2f meanVec(0, 0);
+    for (size_t i = 0; i < r.errorsMm.size(); i++)
+    {
+        meanErr += r.errorsMm[i];
+        rmsErr += r.errorsMm[i] * r.errorsMm[i];
+        maxErr = max(maxErr, r.errorsMm[i]);
+        meanVec += r.errorVectors[i];
+    }
+    if (!r.errorsMm.empty())
+    {
+        meanErr /= r.errorsMm.size();
+        rmsErr = sqrt(rmsErr / r.errorsMm.size());
+        meanVec *= 1.0f / r.errorsMm.size();
+    }
+
+    printf("%s: TP = %d FP = %d FN = %d | Precision=%.3f Recall=%.3f F1-%.3f| Error mean = %.1fmm RMS = %.1fmm Max =%.1fmm | mean offset (x=%.1f, y=%.1f)mm\n",
+            label.c_str(), r.truePositives, r.falsePositives, r.falseNegatives, precision, f1, recall, meanErr, rmsErr, maxErr, meanVec.x, meanVec.y);
 }
