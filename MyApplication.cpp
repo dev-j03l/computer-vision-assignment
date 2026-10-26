@@ -45,6 +45,19 @@ struct BallCandidate{
     double score = 0;
 };
 
+struct GroundTruthBall
+{
+    int number = 0; // 1-15 or 0 for the white ball
+    Point2f tablePos;
+};
+
+struct EvaluationResult
+{
+    int truePositives = 0, falsePositives = 0, falseNegatives = 0;
+    vector<double> errorsMm;
+    vector<Point2f> errorVectors;
+};
+
 // Function Declarations
 void saveStage(const string& imageName, const string& stageName, const Mat& image);
 Point2f mapPoint(const Mat& homography, const Point2f& p);
@@ -63,6 +76,7 @@ double foregroundFractionInCircle(const Mat& mask, const Point2f& centre, double
 double edgeSupportOnCircle(const Mat& edges, const Point2f& centre, double radius);
 double distanceToNearestPocket(const Point2f& tablePos);
 vector<BallCandidate> verifyCandidates(const vector<BallCandidate>& candidates, const Mat& image, ForegroundResult& fg, const TableGeometry& g, const string& name);
+
 
 void MyApplication()
 {
