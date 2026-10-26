@@ -314,7 +314,7 @@ vector<BallCandidate> findCandidates(const Mat& image, const Mat& tableMask, con
 
     int minRadius = (int)floor(0.85 * g.minRadiusPx);
     int maxRadius = (int)ceil(1.15 * g.maxRadiusPx);
-    double minDist = 1.5 * g.minRadiusPx;
+    double minDist = g.minRadiusPx;
 
     const double ACCUMULATOR_THRESHOLD = 15;
     vector<Vec3f> circles;
@@ -456,7 +456,7 @@ vector<BallCandidate> verifyCandidates(const vector<BallCandidate>& candidates, 
         bool duplicate = false;
         for (const BallCandidate& kept : balls)
         {
-            if (norm(b.imagePos - kept.imagePos) < 1.5 * b.expectedRadiusPx){
+            if (norm(b.imagePos - kept.imagePos) < BALL_RADIUS_MM){
                 duplicate = true;
                 break;
             }
