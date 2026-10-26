@@ -652,5 +652,5 @@ void printEvaluation(const string& label, const EvaluationResult& r)
     }
 
     printf("%s: TP = %d FP = %d FN = %d | Precision=%.3f Recall=%.3f F1-%.3f| Error mean = %.1fmm RMS = %.1fmm Max =%.1fmm | mean offset (x=%.1f, y=%.1f)mm\n",
-            label.c_str(), r.truePositives, r.falsePositives, r.falseNegatives, precision, f1, recall, meanErr, rmsErr, maxErr, meanVec.x, meanVec.y);
+            label.c_str(), r.truePositives, r.falsePositives, r.falseNegatives, precision, recall, f1, meanErr, rmsErr, maxErr, meanVec.x, meanVec.y);
 }
