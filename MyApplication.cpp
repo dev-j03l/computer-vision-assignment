@@ -77,6 +77,7 @@ double edgeSupportOnCircle(const Mat& edges, const Point2f& centre, double radiu
 double distanceToNearestPocket(const Point2f& tablePos);
 vector<BallCandidate> verifyCandidates(const vector<BallCandidate>& candidates, const Mat& image, ForegroundResult& fg, const TableGeometry& g, const string& name);
 vector<GroundTruthBall> getGroundTruth(const string& name);
+EvaluationResult evaluateDetections(const vector<BallCandidates>& balls, const vector<GroundTruthBall>& truth, const Mat& rectified, const string& name);
 
 void MyApplication()
 {
@@ -541,4 +542,64 @@ vector<GroundTruthBall> getGroundTruth(const string& name)
                 << " mm apart (physically impossible)" << endl;
     
     return truth;
+}
+
+/*
+Purpose: matches detections to Ground Truth, then counts TP / FP / FN and errors.
+We also do some filtering
+*/
+EvaluationResult evaluateDetections(const vector<BallCandidates>& balls, const vector<GroundTruthBall>& truth, const Mat& rectified, const string& name)
+{
+    const double MATCH_TOLERANCE_MM = BALL_RADIUS_MM; //futher than one radius = not on the ball
+    EvaluationResult r;
+
+    // All possible pairs w/in tolerance, closest first
+    struct Pair {int det, gt; double dist;};
+    vector<Pair> pairs;
+    for (int d = 0; d < (int)balls.size(); d++)
+        for (int t = 0; t < (int)truth.size(); t++)
+        {
+            double dist = norm(balls[d].tablePos - truth[t].tablePos);
+            if (dist <= MATCH_TOLERANCE_MM) pairs.push_back({d, t, dist});
+        }
+    sort(pairs.begin(), pairs.end(), [](const Pair& a, const Pair& b) {return a.dist < b.dist;});
+
+    // a greedy 1-1 assignment
+    vector<int> detMatch(balls.size(), -1), gtMatch(truth.size(), -1);
+    for (const Pair& p : pairs)
+    {
+        if (detMatch[p.det] != -1 || gtMatch(p.gt) != -1) continue;
+        detMatch[p.det] = p.gt;
+        gtMatch[p.gt] = p.det;
+        r.errorsMm.push_back(p.dist);
+        r.errorVectors.push_back(balls[p.det].tablePos - truth[p.gt].tablePos);
+    }
+
+    // counts of TP, FP, FN
+    r.truePositives = (int)r.errorsMm.size();
+    r.falsePositives = (int)balls.size() - r.truePositives;
+    r.falseNegatives = (int)truth.size() - r.truePositives;
+
+    // picture for my report :). green = correct (line to gt), red = fp, yellow = missed ball
+    Mat vis = rectified.clone();
+    int rad = (int)BALL_RADIUS_MM;
+    for(int t = 0; t < (int)truth.size(); t++)
+    {
+        string label = truth[t].number == 0 ? "W" : to_string(truth[t].number);
+        if (gtMatch[t] == -1) // missed ball
+            circle(vis, truth[t].tablePos, rad, Scalar(0, 255, 255), 3);
+        putText(vis, label, truth[t].tablePos + Point2f(rad, -rad), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 255), 1);
+    }
+
+    for (int d = 0; d < (int)balls.size(); d++)
+    {
+        if (detMatch[d] == -1) // FP
+            circle(vis, balls[d].tablePos, rad, Scalar(0, 0, 255), 3);
+        else{
+            circle(vis, balls[d].tablePos, rad, Scalar(0, 255, 0), 2);
+            line(vis, balls[d].tablePos, truth[detMatch[d]].tablePos, Scalar(255, 255, 255), 1);
+        }
+    }
+    saveStage(name, "6_evaluation", vis);
+    return r;
 }
