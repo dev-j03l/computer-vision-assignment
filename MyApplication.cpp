@@ -144,20 +144,9 @@ void MyApplication()
     printEvaluation("ALL TEST IMAGES (TABLES 1-6)", total);
 }
 
-/*
-Purpose: saves any intermediate image with a consistent name, like Table1_2f_mask.png
-This is to help me with making the report.
-*/
-void saveStage(const string& imageName, const string& stageName, const Mat& image)
-{
-    Mat toSave;
-    if (image.depth() == CV_32F || image.depth() == CV_64F)
-        normalize(image, toSave, 0, 255, NORM_MINMAX, CV_8U);
-    else
-        toSave = image;
-    imwrite(OUTPUT_FOLDER + imageName + "_" + stageName + ".png", toSave);
-}
-
+/* ===========================================================================================================
+    1. Table Geometry and Rectification
+   ===========================================================================================================*/
 /*
 Purpose: i use this to send one point through a homography. Its needed cause perspectiveTransform
 only accepts a list of points, so I wrap a single point in a vector of one.
@@ -246,6 +235,9 @@ Mat rectify(const Mat& image, const TableGeometry& g)
     return rectified;
 }
 
+/* ===========================================================================================================
+    2. Foreground Segmentation
+   ===========================================================================================================*/
 /*
 Purpose: for median filter. We need odd sizes for centre pixel. If im deriving a value that isnt odd
 this ensures we make it odd
@@ -332,6 +324,9 @@ ForegroundResult computeForeground(const Mat& image, const Mat& tableMask, const
     return result;
 }
 
+/* ===========================================================================================================
+    3. Circle Candidate Detection
+   ===========================================================================================================*/
 /*
 Purpose: finds circles in the original photo using the edges. The threshold is intentionally low because we will
 filter out the bad ones later.
@@ -388,6 +383,9 @@ void drawCandidates(const Mat& image, const vector<BallCandidate>& candidates, c
     saveStage(name, stageName, vis);
 }
 
+/* ===========================================================================================================
+    4. Candidate Verification
+   ===========================================================================================================*/
 /*
 Purpose: Recreates the Hough Edges on a candidate, thickens edge by one pixel so circle thats off 
 still counts
@@ -501,7 +499,14 @@ vector<BallCandidate> verifyCandidates(const vector<BallCandidate>& candidates, 
     drawCandidates(image, balls, name, "4_verified");
     return balls;
 }
+/* ===========================================================================================================
+    5. Ball Recognition
+   ===========================================================================================================*/
+   // TODO
 
+/* ===========================================================================================================
+    6. Evaluation
+   ===========================================================================================================*/
 /*
 Purpose: get ground truth from excel. 
 */
@@ -653,4 +658,21 @@ void printEvaluation(const string& label, const EvaluationResult& r)
 
     printf("%s: TP = %d FP = %d FN = %d | Precision=%.3f Recall=%.3f F1-%.3f| Error mean = %.1fmm RMS = %.1fmm Max =%.1fmm | mean offset (x=%.1f, y=%.1f)mm\n",
             label.c_str(), r.truePositives, r.falsePositives, r.falseNegatives, precision, recall, f1, meanErr, rmsErr, maxErr, meanVec.x, meanVec.y);
+}
+
+/* ===========================================================================================================
+    7. General Utilities
+   ===========================================================================================================*/
+/*
+Purpose: saves any intermediate image with a consistent name, like Table1_2f_mask.png
+This is to help me with making the report.
+*/
+void saveStage(const string& imageName, const string& stageName, const Mat& image)
+{
+    Mat toSave;
+    if (image.depth() == CV_32F || image.depth() == CV_64F)
+        normalize(image, toSave, 0, 255, NORM_MINMAX, CV_8U);
+    else
+        toSave = image;
+    imwrite(OUTPUT_FOLDER + imageName + "_" + stageName + ".png", toSave);
 }
