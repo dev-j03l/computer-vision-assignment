@@ -100,6 +100,7 @@ vector<BallCandidate> verifyCandidates(const vector<BallCandidate>& candidates, 
 vector<GroundTruthBall> getGroundTruth(const string& name);
 EvaluationResult evaluateDetections(const vector<BallCandidate>& balls, const vector<GroundTruthBall>& truth, const Mat& rectified, const string& name);
 void printEvaluation(const string& label, const EvaluationResult& r);
+double chromaOf(const Vec3b& lab);
 
 void MyApplication()
 {
@@ -523,7 +524,15 @@ vector<BallCandidate> verifyCandidates(const vector<BallCandidate>& candidates, 
 /* ===========================================================================================================
     5. Ball Recognition
    ===========================================================================================================*/
-   // TODO
+/*
+Purpose: how colourful a Lab pixel is: distance from neutral gray in the (a, b) plane. 8bit lab stores a and b
+with offset of 128 so 128 means neutral
+*/
+double chromaOf(const Vec3b& lab)
+{
+    double a = lab[1] - 128.0, b = lab[2] - 128.0;
+    return sqrt(a * a + b * b);
+}
 
 /* ===========================================================================================================
     6. Evaluation
@@ -694,7 +703,7 @@ void printEvaluation(const string& label, const EvaluationResult& r)
 }
 
 /* ===========================================================================================================
-    7. General Utilities
+   7. General Utilities
    ===========================================================================================================*/
 /*
 Purpose: saves any intermediate image with a consistent name, like Table1_2f_mask.png
