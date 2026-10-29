@@ -102,6 +102,7 @@ EvaluationResult evaluateDetections(const vector<BallCandidate>& balls, const ve
 void printEvaluation(const string& label, const EvaluationResult& r);
 double chromaOf(const Vec3b& lab);
 BallFeatures extractFeatures(const Mat& lab, const Point2f& centre, double radiusPx, double whiteChromaThreshold);
+BallClassifier trainClassifier(const Mat& image, const vector<BallCandidate>& balls, const vector<GroundTruthBall>& truth, const EvaluationResult& match);
 
 void MyApplication()
 {
@@ -570,6 +571,40 @@ BallFeatures extractFeatures(const Mat& lab, const Point2f& centre, double radiu
         f.colour = Vec3d(median(L), median(A), median(B));
     
     return f;
+}
+
+BallClassifier trainClassifier(const Mat& image, const vector<BallCandidate>& balls, const vector<GroundTruthBall>& truth, const EvaluationResult& match)
+{
+    BallClassifier classifier;
+    Mat lab;
+    cvtColor(image, lab, COLOR_BGR2Lab);
+
+    // white threshold from cue ball's own pixels
+    for (size_t d = 0; d < ball.size(); d++)
+    {
+        int t = match.detectionToTruth[d];
+        if (t < 0 || truth[t].number != 0) continue;
+        vector<double> chroma;
+        Mat circleMask = Mat::zeros(lab.size(), CV_8U);
+        circle(circleMask, balls[d].imagePos, cvRound(0.75 * balls[d].expectedRadiusPx), Scalar(255), FILLED);
+        for (int r = 0; r < lab.rows; r++)
+            for (int c = 0; c < lab.cols; c++)
+                if (circleMask.at<uchar>(r, c)) chroma.push_back(chromaOf(lab.at<Vec3b>(r,c)));
+        sort(chroma.begin(), chroma.end());
+        classifier.whiteChromaThreshold = chroma[(size_t)(0.99 * (chroma.size() - 1))];
+    }
+    cout << "Learned white chroma threshold = " << classifier.whiteChromaThreshold << endl;
+
+    // one template per ball
+    for (size_t d = 0; d < balls.size(); d++)
+    {
+        int t = match.detectionToTruth[d];
+        if (t < 0) continue;
+        classifier.numbers.push_back(truth[t].number);
+        classifier.templates.push_back(extractFeatures(lab, balls[d].imagePos, balls[d].expectedRadiusPx, classifier.whiteChromaThreshold));
+    }
+    cout << " Trained " << classifier.templates.size() << " ball templates" << endl;
+    return classifier;
 }
 
 /* ===========================================================================================================
