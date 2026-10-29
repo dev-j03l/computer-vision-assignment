@@ -43,6 +43,7 @@ struct BallCandidate{
     double foregroundFraction = 0;
     double edgeSupport = 0;
     double score = 0;
+    int predictedNumber = -1;
 };
 
 struct GroundTruthBall
@@ -56,6 +57,26 @@ struct EvaluationResult
     int truePositives = 0, falsePositives = 0, falseNegatives = 0;
     vector<double> errorsMm;
     vector<Point2f> errorVectors;
+    vector<int> detectionToTruth;
+};
+
+struct BallFeatures
+{
+    double whiteFraction = 0;  // fraction of ball that is white (stripes and cue ball would have it high)
+    Vec3d colour;              // median (L, a, b) of the non-white pixels
+};
+
+struct BallClassifier
+{
+    double whiteChromaThreshold = 0; // pixels below this chroma (and bright) count as white
+    vector<int> numbers; //ball numbers of each template
+    vector<BallFeatures> templates; // one template per ball, from AllBalls
+};
+
+struct RecognitionResult
+{
+    int correct = 0, classified = 0, truthCount = 0;
+    Mat confusion = Mat::zeros(16, 16, CV_32S); // rows = true ball, cols = predicted (index 0 = white)
 };
 
 // Function Declarations
@@ -509,15 +530,26 @@ vector<BallCandidate> verifyCandidates(const vector<BallCandidate>& candidates, 
    ===========================================================================================================*/
 /*
 Purpose: get ground truth from excel. 
+Corrections to the spreadsheet (documented in the report):
+Table1 balls 2, 4 and 11 were entered as (column, row) - their row values (1212, 1050, 1169)
+are larger than the table height (683), so they have been swapped back.
+AllBalls balls 11-15: checking the labels against the numbers printed on the balls shows the
+spreadsheet has them in the wrong order. Spreadsheet -> actual: (1130,334) is 13 not 11,
+(1013,335) is 11 not 12, (1067,336) is 12 not 13, (1245,342) is 15 not 14, (1187,345) is 14 not 15.
+This matters because AllBalls is the training image for Stage 2.
+Known remaining problem: Table1 balls 3 and 7 are listed 1.4 mm apart, which is physically
+impossible. The correct position of one of them is unknown, so both are kept as given and the
+sanity check below reports it.
 */
 vector<GroundTruthBall> getGroundTruth(const string& name)
 {
     const vector<string> names = {"AllBalls", "Table1", "Table2", "Table3", "Table4", "Table5", "Table6"};
     // {x, y} for ball 1, 2, ..., 15, white
     const int data[7][16][2] = {
-        // AllBalls
+        // AllBalls - balls 11-15 corrected (see comment above): the spreadsheet labels for the
+        // bottom row do not match the numbers printed on the balls in the image
         { {908,253},{959,250},{1013,255},{1072,256},{1132,254},{1184,262},{1244,256},{1307,253},
-          {901,329},{961,330},{1130,334},{1013,335},{1067,336},{1245,342},{1187,345},{797,293} },
+          {901,329},{961,330},{1013,335},{1067,336},{1130,334},{1187,345},{1245,342},{797,293} },
         // Table1
         { {1092,309},{1212,429},{1174,353},{1050,335},{1211,285},{1170,261},{1173,352},{1132,331},
           {1210,240},{1170,310},{1169,407},{1135,281},{1212,374},{1091,360},{1213,331},{29,288} },
@@ -604,6 +636,7 @@ EvaluationResult evaluateDetections(const vector<BallCandidate>& balls, const ve
     r.truePositives = (int)r.errorsMm.size();
     r.falsePositives = (int)balls.size() - r.truePositives;
     r.falseNegatives = (int)truth.size() - r.truePositives;
+    r.detectionToTruth = detMatch;
 
     // picture for my report :). green = correct (line to gt), red = fp, yellow = missed ball
     Mat vis = rectified.clone();
