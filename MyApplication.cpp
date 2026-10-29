@@ -101,6 +101,7 @@ vector<GroundTruthBall> getGroundTruth(const string& name);
 EvaluationResult evaluateDetections(const vector<BallCandidate>& balls, const vector<GroundTruthBall>& truth, const Mat& rectified, const string& name);
 void printEvaluation(const string& label, const EvaluationResult& r);
 double chromaOf(const Vec3b& lab);
+BallFeatures extractFeatures(const Mat& lab, const Point2f& centre, double radiusPx, double whiteChromaThreshold);
 
 void MyApplication()
 {
@@ -532,6 +533,43 @@ double chromaOf(const Vec3b& lab)
 {
     double a = lab[1] - 128.0, b = lab[2] - 128.0;
     return sqrt(a * a + b * b);
+}
+
+BallFeatures extractFeatures(const Mat& lab, const Point2f& centre, double radiusPx, double whiteChromaThreshold)
+{
+    const double SAMPLE_FRACTION = 0.75;
+    const int WHITE_MIN_LIGHTNESS = 150;
+
+    Mat circleMask = Mat::zeros(lab.size(), CV_8U);
+    circle(circleMask, centre, cvRound(SAMPLE_FRACTION * radiusPx), SCALAR(255), FILLED);
+
+    vector<uchar> L, A, B;
+    int total = 0, white = 0;
+    for (int r = 0; r < lab.rows; r++)
+        for (int c = 0; c < lab.cols; c++)
+        {
+            if (!circleMask.at<uchar>(r,c)) continue;
+            const Vec3b& p = lab.at<Vec3b>(r,c);
+            total++;
+            if (chromaOf(p) < whiteChromaThreshold && p[0] > WHITE_MIN_LIGHTNESS) white++;
+            else { L.push_back(p[0]); A.push_back(p[1]); B.push_back(p[2]); }
+        }
+    
+    BallFeatures f;
+    f.whiteFraction = total ? (double)white / total : 0;
+
+    // median of each channel of non-white pixels
+    auto median = [](vector<uchar>& v) -> double {
+        if (v.empty()) return 0;
+        nth_element(v.begin(), v.begin() + v.size() / 2, v.end());
+        return v[v.size() / 2];
+    };
+    if (L.size() < 10)
+        f.colour = Vec3d(255, 128, 128); // all white; cue ball
+    else
+        f.colour = Vec3d(median(L), median(A), median(B));
+    
+    return f;
 }
 
 /* ===========================================================================================================
