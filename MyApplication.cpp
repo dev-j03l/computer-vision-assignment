@@ -103,6 +103,10 @@ void printEvaluation(const string& label, const EvaluationResult& r);
 double chromaOf(const Vec3b& lab);
 BallFeatures extractFeatures(const Mat& lab, const Point2f& centre, double radiusPx, double whiteChromaThreshold);
 BallClassifier trainClassifier(const Mat& image, const vector<BallCandidate>& balls, const vector<GroundTruthBall>& truth, const EvaluationResult& match);
+double featureDistance(const BallFeatures& a, const BallFeatures& b);
+void classifyBalls(vector<BallCandidate>& balls, const Mat& image, const BallClassifier& classifier, const string& name);
+void evaluateRecognition(const vector<BallCandidate>& balls, const vector<GroundTruthBall>& truth, const EvaluationResult& match, RecognitionResult& result, const Mat& rectified, const string& name);
+void printRecognition(const string& label, const RecognitionResult& r, bool showConfusion);
 
 void MyApplication()
 {
@@ -114,6 +118,8 @@ void MyApplication()
     << geometry.maxRadiusPx << " px (near cushion)" << endl;
 
     EvaluationResult total; // for step 6. summed over images
+    BallClassifier classifier;
+    RecognitionResult recognitionTotal;
 
     for (const string& filename : FILE_NAMES)
     {
@@ -154,6 +160,22 @@ void MyApplication()
         EvaluationResult r = evaluateDetections(balls, truth, rectified, name);
         printEvaluation(name, r);
 
+        if (name == "AllBalls")
+            classifier = trainClassifier(image, balls, truth, r);
+        classifyBalls(balls, image, classifier, name);
+
+        RecognitionResult rec;
+        evaluateRecognition(balls, truth, r, rec, rectified, name);
+        printRecognition(name, rec, false);
+        if (name != "AllBalls")
+        {
+            recognitionTotal.correct += rec.correct;
+            recognitionTotal.classified += rec.classified;
+            recognitionTotal.truthCount += rec.truthCount;
+            recognitionTotal.confusion += rec.confusion;
+        }
+
+
         // overall total excluding allballs
         if (name != "AllBalls")
         {
@@ -166,6 +188,9 @@ void MyApplication()
     }
     cout << endl << "==================== STAGE 1 RESULTS ====================" << endl;
     printEvaluation("ALL TEST IMAGES (TABLES 1-6)", total);
+
+    cout << endl << "==================== STAGE 2 RESULTS ====================" << endl;
+    printRecognition("ALL TEST IMAGES (Table1-6)", recognitionTotal, true);
 }
 
 /* ===========================================================================================================
@@ -505,7 +530,7 @@ vector<BallCandidate> verifyCandidates(const vector<BallCandidate>& candidates, 
         passed.push_back(b);
     }
 
-    sort(passed.begin(), passed.end(), [](const BallCandidate& a, const BallCandidate& b){return a.score > b.score;});
+    stable_sort(passed.begin(), passed.end(), [](const BallCandidate& a, const BallCandidate& b){return a.score > b.score;});
 
     vector<BallCandidate> balls;
     for (const BallCandidate& b : passed)
@@ -542,7 +567,7 @@ BallFeatures extractFeatures(const Mat& lab, const Point2f& centre, double radiu
     const int WHITE_MIN_LIGHTNESS = 150;
 
     Mat circleMask = Mat::zeros(lab.size(), CV_8U);
-    circle(circleMask, centre, cvRound(SAMPLE_FRACTION * radiusPx), SCALAR(255), FILLED);
+    circle(circleMask, centre, cvRound(SAMPLE_FRACTION * radiusPx), Scalar(255), FILLED);
 
     vector<uchar> L, A, B;
     int total = 0, white = 0;
@@ -580,7 +605,7 @@ BallClassifier trainClassifier(const Mat& image, const vector<BallCandidate>& ba
     cvtColor(image, lab, COLOR_BGR2Lab);
 
     // white threshold from cue ball's own pixels
-    for (size_t d = 0; d < ball.size(); d++)
+    for (size_t d = 0; d < balls.size(); d++)
     {
         int t = match.detectionToTruth[d];
         if (t < 0 || truth[t].number != 0) continue;
@@ -590,7 +615,7 @@ BallClassifier trainClassifier(const Mat& image, const vector<BallCandidate>& ba
         for (int r = 0; r < lab.rows; r++)
             for (int c = 0; c < lab.cols; c++)
                 if (circleMask.at<uchar>(r, c)) chroma.push_back(chromaOf(lab.at<Vec3b>(r,c)));
-        sort(chroma.begin(), chroma.end());
+        stable_sort(chroma.begin(), chroma.end());
         classifier.whiteChromaThreshold = chroma[(size_t)(0.99 * (chroma.size() - 1))];
     }
     cout << "Learned white chroma threshold = " << classifier.whiteChromaThreshold << endl;
@@ -605,6 +630,39 @@ BallClassifier trainClassifier(const Mat& image, const vector<BallCandidate>& ba
     }
     cout << " Trained " << classifier.templates.size() << " ball templates" << endl;
     return classifier;
+}
+
+double featureDistance(const BallFeatures& a, const BallFeatures& b)
+{
+    const double WHITE_WEIGHT = 100;
+    return norm(a.colour - b.colour) + WHITE_WEIGHT * fabs(a.whiteFraction - b.whiteFraction);
+}
+
+void classifyBalls(vector<BallCandidate>& balls, const Mat& image, const BallClassifier& classifier, const string& name)
+{
+    Mat lab;
+    cvtColor(image, lab, COLOR_BGR2Lab);
+
+    // every (ball, template) pair and how different they look
+    struct Option { int ball, templ; double dist; };
+    vector<Option> options;
+    for (int b = 0; b < (int)balls.size(); b++)
+    {
+        BallFeatures f = extractFeatures(lab, balls[b].imagePos, balls[b].expectedRadiusPx, classifier.whiteChromaThreshold);
+        for (int t = 0; t < (int)classifier.templates.size(); t++)
+            options.push_back({ b, t, featureDistance(f, classifier.templates[t]) });
+    }
+    stable_sort(options.begin(), options.end(), [](const Option& a, const Option& b) { return a.dist < b.dist; });
+
+    // most confident first; each ball gets one number, each number used once
+    vector<bool> templateUsed(classifier.templates.size(), false);
+    for (BallCandidate& b : balls) b.predictedNumber = -1;
+    for (const Option& o : options)
+    {
+        if (balls[o.ball].predictedNumber != -1 || templateUsed[o.templ]) continue;
+        balls[o.ball].predictedNumber = classifier.numbers[o.templ];
+        templateUsed[o.templ] = true;
+    }
 }
 
 /* ===========================================================================================================
@@ -701,7 +759,7 @@ EvaluationResult evaluateDetections(const vector<BallCandidate>& balls, const ve
             double dist = norm(balls[d].tablePos - truth[t].tablePos);
             if (dist <= MATCH_TOLERANCE_MM) pairs.push_back({d, t, dist});
         }
-    sort(pairs.begin(), pairs.end(), [](const Pair& a, const Pair& b) {return a.dist < b.dist;});
+    stable_sort(pairs.begin(), pairs.end(), [](const Pair& a, const Pair& b) {return a.dist < b.dist;});
 
     // a greedy 1-1 assignment
     vector<int> detMatch(balls.size(), -1), gtMatch(truth.size(), -1);
@@ -744,6 +802,30 @@ EvaluationResult evaluateDetections(const vector<BallCandidate>& balls, const ve
     return r;
 }
 
+void evaluateRecognition(const vector<BallCandidate>& balls, const vector<GroundTruthBall>& truth, const EvaluationResult& match, RecognitionResult& result, const Mat& rectified, const string& name)
+{
+    Mat vis = rectified.clone();
+    result.truthCount = (int)truth.size();
+    for (size_t d = 0; d < balls.size(); d++)
+    {
+        int t = match.detectionToTruth[d];
+        if (t < 0 || balls[d].predictedNumber < 0) continue;  // false positive
+        int trueNumber = truth[t].number, predicted = balls[d].predictedNumber;
+        result.classified++;
+        result.confusion.at<int>(trueNumber, predicted)++;
+        bool ok = (trueNumber == predicted);
+        if (ok) result.correct++;
+
+        // picture: green = correct, red = wrong with "predicted/true"
+        auto label = [](int n) { return n == 0 ? string("W") : to_string(n); };
+        string text = ok ? label(predicted) : label(predicted) + "/" + label(trueNumber);
+        Scalar colour = ok ? Scalar(0, 255, 0) : Scalar(0, 0, 255);
+        circle(vis, balls[d].tablePos, (int)BALL_RADIUS_MM, colour, 2);
+        putText(vis, text, balls[d].tablePos + Point2f(-12, 5), FONT_HERSHEY_SIMPLEX, 0.5, colour, 2);
+    }
+    saveStage(name, "6_recognition", vis);
+}
+
 /*
 Purpose: prints precision, recall, F1 and position errors
 Precision = TP / (TP + FP) // how many were real balls
@@ -775,6 +857,36 @@ void printEvaluation(const string& label, const EvaluationResult& r)
             label.c_str(), r.truePositives, r.falsePositives, r.falseNegatives, precision, recall, f1, meanErr, rmsErr, maxErr, meanVec.x, meanVec.y);
 }
 
+void printRecognition(const string& label, const RecognitionResult& r, bool showConfusion)
+{
+    double accuracy = r.classified ? (double)r.correct / r.classified : 0;
+    double endToEnd = r.truthCount ? (double)r.correct / r.truthCount : 0;
+    printf("%s: recognised %d/%d correctly (accuracy=%.3f) | end-to-end %d/%d (%.3f)\n", 
+            label.c_str(), r.correct, r.classified, accuracy, r.correct, r.truthCount, endToEnd);
+    if (!showConfusion) return;
+
+    cout << "Confusion matrix (row = true ball, columns = predicted, W = white):" << endl << "    ";
+    for (int c = 0; c < 16; c++) printf("%3s", c == 0? "W" : to_string(c).c_str());
+    cout << endl;
+    for (int row = 0; row < 16; row++){
+        printf("%4s ", row == 0 ? "W" : to_string(row).c_str());
+        for (int c = 0; c < 16; c++)
+        {
+            int v = r.confusion.at<int>(row, c);
+            if (v) printf("%3d", v); else printf("  .");
+        }
+        cout << endl;
+    }
+
+    cout << "Per ball (recall = correct / times it appeared, precision = correct / times predicted):" << endl;
+    for (int n = 0; n < 16; n++)
+    {
+        int tp = r.confusion.at<int>(n, n);
+        int rowSum = (int)sum(r.confusion.row(n))[0], colSum = (int)sum(r.confusion.col(n))[0];
+        printf("  %2s: recall=%.2f (%d/%d) precision=%.2f (%d/%d)\n", n == 0 ? "W" : to_string(n).c_str(),
+            rowSum ? (double)tp / rowSum : 0, tp, rowSum, colSum ? (double)tp / colSum : 0, tp, colSum);
+    }
+}
 /* ===========================================================================================================
    7. General Utilities
    ===========================================================================================================*/
