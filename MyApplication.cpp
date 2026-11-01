@@ -81,6 +81,7 @@ struct RecognitionResult
 
 // Function Declarations
 void saveStage(const string& imageName, const string& stageName, const Mat& image);
+Mat filledCircleMask(const Size& size, const Point2f& centre, double radius);
 Point2f mapPoint(const Mat& homography, const Point2f& p);
 double expectedRadiusAtTablePoint(const TableGeometry& g, const Point2f& tablePoint);
 double expectedRadiusAtImagePoint(const TableGeometry& g, const Point2f& imagePoint);
@@ -454,8 +455,7 @@ asks what fraction of circle is marked as non cloth
 */
 double foregroundFractionInCircle(const Mat& mask, const Point2f& centre, double radius)
 {
-    Mat circleMask = Mat::zeros(mask.size(), CV_8U);
-    circle(circleMask, centre, cvRound(radius), Scalar(255), FILLED);
+    Mat circleMask = filledCircleMask(mask.size(), centre, radius);
     int inside = countNonZero(circleMask);
     if (inside == 0) return 0;
     return (double)countNonZero(mask & circleMask) / inside;
@@ -565,8 +565,7 @@ BallFeatures extractFeatures(const Mat& lab, const Point2f& centre, double radiu
     const double SAMPLE_FRACTION = 0.75;
     const int WHITE_MIN_LIGHTNESS = 150;
 
-    Mat circleMask = Mat::zeros(lab.size(), CV_8U);
-    circle(circleMask, centre, cvRound(SAMPLE_FRACTION * radiusPx), Scalar(255), FILLED);
+    Mat circleMask = filledCircleMask(lab.size(), centre, SAMPLE_FRACTION * radiusPx);
 
     vector<uchar> L, A, B;
     int total = 0, white = 0;
@@ -609,8 +608,7 @@ BallClassifier trainClassifier(const Mat& image, const vector<BallCandidate>& ba
         int t = match.detectionToTruth[d];
         if (t < 0 || truth[t].number != 0) continue;
         vector<double> chroma;
-        Mat circleMask = Mat::zeros(lab.size(), CV_8U);
-        circle(circleMask, balls[d].imagePos, cvRound(0.75 * balls[d].expectedRadiusPx), Scalar(255), FILLED);
+        Mat circleMask = filledCircleMask(lab.size(), balls[d].imagePos, 0.75 * balls[d].expectedRadiusPx);
         for (int r = 0; r < lab.rows; r++)
             for (int c = 0; c < lab.cols; c++)
                 if (circleMask.at<uchar>(r, c)) chroma.push_back(chromaOf(lab.at<Vec3b>(r, c)));
@@ -889,6 +887,16 @@ void printRecognition(const string& label, const RecognitionResult& r, bool show
 /* ===========================================================================================================
    7. General Utilities
    ===========================================================================================================*/
+/*
+Purpose: makes a filled white circle on a black mask, for sampling the pixels inside a ball
+*/
+Mat filledCircleMask(const Size& size, const Point2f& centre, double radius)
+{
+    Mat mask = Mat::zeros(size, CV_8U);
+    circle(mask, centre, cvRound(radius), Scalar(255), FILLED);
+    return mask;
+}
+
 /*
 Purpose: saves any intermediate image with a consistent name, like Table1_2f_mask.png
 This is to help me with making the report.
