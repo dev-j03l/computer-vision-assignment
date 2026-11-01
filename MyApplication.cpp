@@ -175,7 +175,6 @@ void MyApplication()
             recognitionTotal.confusion += rec.confusion;
         }
 
-
         // overall total excluding allballs
         if (name != "AllBalls")
         {
@@ -269,7 +268,7 @@ Mat makeTableMask(const Size& imageSize, const TableGeometry& g)
     vector<Point> polygon;
     for (const Point2f& p : g.imageCorners)
         polygon.push_back(Point(cvRound(p.x), cvRound(p.y)));
-    
+
     fillConvexPoly(mask, polygon, Scalar(255));
     return mask;
 }
@@ -316,7 +315,7 @@ double otsuThresholdInsideMask(const Mat& image8u, const Mat& mask)
 
 /*
 Purpose: finds everything on the table that is not cloth. I compare each pixel with the local
-colour around it, so lighting gradient across the table wont matter. I return a difference map and 
+colour around it, so lighting gradient across the table wont matter. I return a difference map and
 a cleaned mask.
 */
 ForegroundResult computeForeground(const Mat& image, const Mat& tableMask, const TableGeometry& g, const string& name)
@@ -401,7 +400,7 @@ vector<BallCandidate> findCandidates(const Mat& image, const Mat& tableMask, con
 
     Mat allowed;
     dilate(tableMask, allowed, getStructuringElement(MORPH_ELLIPSE, Size(oddAtLeast(2 * g.minRadiusPx), oddAtLeast(2* g.minRadiusPx))));
-    
+
     vector<BallCandidate> candidates;
     for (const Vec3f& c : circles)
     {
@@ -436,7 +435,7 @@ void drawCandidates(const Mat& image, const vector<BallCandidate>& candidates, c
     4. Candidate Verification
    ===========================================================================================================*/
 /*
-Purpose: Recreates the Hough Edges on a candidate, thickens edge by one pixel so circle thats off 
+Purpose: Recreates the Hough Edges on a candidate, thickens edge by one pixel so circle thats off
 still counts
 */
 Mat makeEdgeImage(const Mat& image, const TableGeometry& g)
@@ -580,7 +579,7 @@ BallFeatures extractFeatures(const Mat& lab, const Point2f& centre, double radiu
             if (chromaOf(p) < whiteChromaThreshold && p[0] > WHITE_MIN_LIGHTNESS) white++;
             else { L.push_back(p[0]); A.push_back(p[1]); B.push_back(p[2]); }
         }
-    
+
     BallFeatures f;
     f.whiteFraction = total ? (double)white / total : 0;
 
@@ -594,7 +593,7 @@ BallFeatures extractFeatures(const Mat& lab, const Point2f& centre, double radiu
         f.colour = Vec3d(255, 128, 128); // all white; cue ball
     else
         f.colour = Vec3d(median(L), median(A), median(B));
-    
+
     return f;
 }
 
@@ -669,7 +668,7 @@ void classifyBalls(vector<BallCandidate>& balls, const Mat& image, const BallCla
     6. Evaluation
    ===========================================================================================================*/
 /*
-Purpose: get ground truth from excel. 
+Purpose: get ground truth from excel.
 Corrections to the spreadsheet (documented in the report):
 Table1 balls 2, 4 and 11 were entered as (column, row) - their row values (1212, 1050, 1169)
 are larger than the table height (683), so they have been swapped back.
@@ -721,12 +720,12 @@ vector<GroundTruthBall> getGroundTruth(const string& name)
         GroundTruthBall t;
         t.number = (ball == 15) ? 0 : ball + 1;
         t.tablePos = Point2f((float)x, (float)y);
-        
+
         // every pos should be on table
         if (x >= TABLE_WIDTH_MM || y >= TABLE_HEIGHT_MM)
-            cout << "Ground Truth Warning: " << name << " ball " << t.number << " (" << x << ", " << y << 
+            cout << "Ground Truth Warning: " << name << " ball " << t.number << " (" << x << ", " << y <<
             ") is outside the table" << endl;
-        
+
         truth.push_back(t);
     }
 
@@ -735,9 +734,9 @@ vector<GroundTruthBall> getGroundTruth(const string& name)
         for (size_t j = i+1; j < truth.size(); j++)
             if (norm(truth[i].tablePos - truth[j].tablePos) < 2 * BALL_RADIUS_MM * 0.9)
                 cout << "Ground Truth Warning: " << name << " balls " << truth[i].number << " and "
-                << truth[j].number << " are only " << norm(truth[i].tablePos - truth[j].tablePos) 
+                << truth[j].number << " are only " << norm(truth[i].tablePos - truth[j].tablePos)
                 << " mm apart (physically impossible)" << endl;
-    
+
     return truth;
 }
 
@@ -861,7 +860,7 @@ void printRecognition(const string& label, const RecognitionResult& r, bool show
 {
     double accuracy = r.classified ? (double)r.correct / r.classified : 0;
     double endToEnd = r.truthCount ? (double)r.correct / r.truthCount : 0;
-    printf("%s: recognised %d/%d correctly (accuracy=%.3f) | end-to-end %d/%d (%.3f)\n", 
+    printf("%s: recognised %d/%d correctly (accuracy=%.3f) | end-to-end %d/%d (%.3f)\n",
             label.c_str(), r.correct, r.classified, accuracy, r.correct, r.truthCount, endToEnd);
     if (!showConfusion) return;
 
