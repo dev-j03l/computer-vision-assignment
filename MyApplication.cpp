@@ -306,7 +306,7 @@ double otsuThresholdInsideMask(const Mat& image8u, const Mat& mask)
     values.reserve(countNonZero(mask));
     for (int r = 0; r < image8u.rows; r++)
         for (int c = 0; c < image8u.cols; c++)
-            if (mask.at<uchar>(r, c)) values.push_back(image8u.at<uchar>(r,c));
+            if (mask.at<uchar>(r, c)) values.push_back(image8u.at<uchar>(r, c));
 
     Mat valuesRow(1, (int)values.size(), CV_8U, values.data());
     Mat dummy;
@@ -325,7 +325,7 @@ ForegroundResult computeForeground(const Mat& image, const Mat& tableMask, const
     // First i want to convert to Lab and blur to help with some noise
     Mat lab;
     cvtColor(image, lab, COLOR_BGR2Lab);
-    GaussianBlur(lab, lab, Size(5,5), 0);
+    GaussianBlur(lab, lab, Size(5, 5), 0);
 
     // now we calculate the local cloth bg. a median on a window about 2 ball diameters
     int backgroundKernel = oddAtLeast(4.0 * g.maxRadiusPx);
@@ -387,7 +387,7 @@ vector<BallCandidate> findCandidates(const Mat& image, const Mat& tableMask, con
 
     const double CANNY_HIGH = 80;
     Mat edges;
-    Canny(grey, edges, CANNY_HIGH/2, CANNY_HIGH);
+    Canny(grey, edges, CANNY_HIGH / 2, CANNY_HIGH);
     saveStage(name, "3a_edges", edges);
 
     int minRadius = (int)floor(0.85 * g.minRadiusPx);
@@ -399,7 +399,7 @@ vector<BallCandidate> findCandidates(const Mat& image, const Mat& tableMask, con
     HoughCircles(grey, circles, HOUGH_GRADIENT, 1, minDist, CANNY_HIGH, ACCUMULATOR_THRESHOLD, minRadius, maxRadius);
 
     Mat allowed;
-    dilate(tableMask, allowed, getStructuringElement(MORPH_ELLIPSE, Size(oddAtLeast(2 * g.minRadiusPx), oddAtLeast(2* g.minRadiusPx))));
+    dilate(tableMask, allowed, getStructuringElement(MORPH_ELLIPSE, Size(oddAtLeast(2 * g.minRadiusPx), oddAtLeast(2 * g.minRadiusPx))));
 
     vector<BallCandidate> candidates;
     for (const Vec3f& c : circles)
@@ -529,7 +529,7 @@ vector<BallCandidate> verifyCandidates(const vector<BallCandidate>& candidates, 
         passed.push_back(b);
     }
 
-    stable_sort(passed.begin(), passed.end(), [](const BallCandidate& a, const BallCandidate& b){return a.score > b.score;});
+    stable_sort(passed.begin(), passed.end(), [](const BallCandidate& a, const BallCandidate& b) { return a.score > b.score; });
 
     vector<BallCandidate> balls;
     for (const BallCandidate& b : passed)
@@ -537,7 +537,7 @@ vector<BallCandidate> verifyCandidates(const vector<BallCandidate>& candidates, 
         bool duplicate = false;
         for (const BallCandidate& kept : balls)
         {
-            if (norm(b.tablePos - kept.tablePos) < BALL_RADIUS_MM){
+            if (norm(b.tablePos - kept.tablePos) < BALL_RADIUS_MM) {
                 duplicate = true;
                 break;
             }
@@ -573,8 +573,8 @@ BallFeatures extractFeatures(const Mat& lab, const Point2f& centre, double radiu
     for (int r = 0; r < lab.rows; r++)
         for (int c = 0; c < lab.cols; c++)
         {
-            if (!circleMask.at<uchar>(r,c)) continue;
-            const Vec3b& p = lab.at<Vec3b>(r,c);
+            if (!circleMask.at<uchar>(r, c)) continue;
+            const Vec3b& p = lab.at<Vec3b>(r, c);
             total++;
             if (chromaOf(p) < whiteChromaThreshold && p[0] > WHITE_MIN_LIGHTNESS) white++;
             else { L.push_back(p[0]); A.push_back(p[1]); B.push_back(p[2]); }
@@ -613,7 +613,7 @@ BallClassifier trainClassifier(const Mat& image, const vector<BallCandidate>& ba
         circle(circleMask, balls[d].imagePos, cvRound(0.75 * balls[d].expectedRadiusPx), Scalar(255), FILLED);
         for (int r = 0; r < lab.rows; r++)
             for (int c = 0; c < lab.cols; c++)
-                if (circleMask.at<uchar>(r, c)) chroma.push_back(chromaOf(lab.at<Vec3b>(r,c)));
+                if (circleMask.at<uchar>(r, c)) chroma.push_back(chromaOf(lab.at<Vec3b>(r, c)));
         stable_sort(chroma.begin(), chroma.end());
         classifier.whiteChromaThreshold = chroma[(size_t)(0.99 * (chroma.size() - 1))];
     }
@@ -780,7 +780,7 @@ EvaluationResult evaluateDetections(const vector<BallCandidate>& balls, const ve
     // picture for my report :). green = correct (line to gt), red = fp, yellow = missed ball
     Mat vis = rectified.clone();
     int rad = (int)BALL_RADIUS_MM;
-    for(int t = 0; t < (int)truth.size(); t++)
+    for (int t = 0; t < (int)truth.size(); t++)
     {
         string label = truth[t].number == 0 ? "W" : to_string(truth[t].number);
         if (gtMatch[t] == -1) // missed ball
@@ -792,7 +792,7 @@ EvaluationResult evaluateDetections(const vector<BallCandidate>& balls, const ve
     {
         if (detMatch[d] == -1) // FP
             circle(vis, balls[d].tablePos, rad, Scalar(0, 0, 255), 3);
-        else{
+        else {
             circle(vis, balls[d].tablePos, rad, Scalar(0, 255, 0), 2);
             line(vis, balls[d].tablePos, truth[detMatch[d]].tablePos, Scalar(255, 255, 255), 1);
         }
@@ -867,7 +867,7 @@ void printRecognition(const string& label, const RecognitionResult& r, bool show
     cout << "Confusion matrix (row = true ball, columns = predicted, W = white):" << endl << "    ";
     for (int c = 0; c < 16; c++) printf("%3s", c == 0? "W" : to_string(c).c_str());
     cout << endl;
-    for (int row = 0; row < 16; row++){
+    for (int row = 0; row < 16; row++) {
         printf("%4s ", row == 0 ? "W" : to_string(row).c_str());
         for (int c = 0; c < 16; c++)
         {
