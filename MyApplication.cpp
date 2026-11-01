@@ -168,17 +168,14 @@ void MyApplication()
         RecognitionResult rec;
         evaluateRecognition(balls, truth, r, rec, rectified, name);
         printRecognition(name, rec, false);
+        // overall total excluding allballs
         if (name != "AllBalls")
         {
             recognitionTotal.correct += rec.correct;
             recognitionTotal.classified += rec.classified;
             recognitionTotal.truthCount += rec.truthCount;
             recognitionTotal.confusion += rec.confusion;
-        }
 
-        // overall total excluding allballs
-        if (name != "AllBalls")
-        {
             total.truePositives += r.truePositives;
             total.falsePositives += r.falsePositives;
             total.falseNegatives += r.falseNegatives;
