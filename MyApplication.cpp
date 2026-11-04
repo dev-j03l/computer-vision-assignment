@@ -1,5 +1,4 @@
-﻿
-#include "Utilities.h"
+﻿#include "Utilities.h"
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/utils/filesystem.hpp>
 using namespace std;
@@ -81,7 +80,6 @@ struct RecognitionResult
 
 // Function Declarations
 void saveStage(const string& imageName, const string& stageName, const Mat& image);
-Mat filledCircleMask(const Size& size, const Point2f& centre, double radius);
 Point2f mapPoint(const Mat& homography, const Point2f& p);
 double expectedRadiusAtTablePoint(const TableGeometry& g, const Point2f& tablePoint);
 double expectedRadiusAtImagePoint(const TableGeometry& g, const Point2f& imagePoint);
@@ -168,14 +166,18 @@ void MyApplication()
         RecognitionResult rec;
         evaluateRecognition(balls, truth, r, rec, rectified, name);
         printRecognition(name, rec, false);
-        // overall total excluding allballs
         if (name != "AllBalls")
         {
             recognitionTotal.correct += rec.correct;
             recognitionTotal.classified += rec.classified;
             recognitionTotal.truthCount += rec.truthCount;
             recognitionTotal.confusion += rec.confusion;
+        }
 
+
+        // overall total excluding allballs
+        if (name != "AllBalls")
+        {
             total.truePositives += r.truePositives;
             total.falsePositives += r.falsePositives;
             total.falseNegatives += r.falseNegatives;
@@ -266,7 +268,7 @@ Mat makeTableMask(const Size& imageSize, const TableGeometry& g)
     vector<Point> polygon;
     for (const Point2f& p : g.imageCorners)
         polygon.push_back(Point(cvRound(p.x), cvRound(p.y)));
-
+    
     fillConvexPoly(mask, polygon, Scalar(255));
     return mask;
 }
@@ -304,7 +306,7 @@ double otsuThresholdInsideMask(const Mat& image8u, const Mat& mask)
     values.reserve(countNonZero(mask));
     for (int r = 0; r < image8u.rows; r++)
         for (int c = 0; c < image8u.cols; c++)
-            if (mask.at<uchar>(r, c)) values.push_back(image8u.at<uchar>(r, c));
+            if (mask.at<uchar>(r, c)) values.push_back(image8u.at<uchar>(r,c));
 
     Mat valuesRow(1, (int)values.size(), CV_8U, values.data());
     Mat dummy;
@@ -313,7 +315,7 @@ double otsuThresholdInsideMask(const Mat& image8u, const Mat& mask)
 
 /*
 Purpose: finds everything on the table that is not cloth. I compare each pixel with the local
-colour around it, so lighting gradient across the table wont matter. I return a difference map and
+colour around it, so lighting gradient across the table wont matter. I return a difference map and 
 a cleaned mask.
 */
 ForegroundResult computeForeground(const Mat& image, const Mat& tableMask, const TableGeometry& g, const string& name)
@@ -323,7 +325,7 @@ ForegroundResult computeForeground(const Mat& image, const Mat& tableMask, const
     // First i want to convert to Lab and blur to help with some noise
     Mat lab;
     cvtColor(image, lab, COLOR_BGR2Lab);
-    GaussianBlur(lab, lab, Size(5, 5), 0);
+    GaussianBlur(lab, lab, Size(5,5), 0);
 
     // now we calculate the local cloth bg. a median on a window about 2 ball diameters
     int backgroundKernel = oddAtLeast(4.0 * g.maxRadiusPx);
@@ -385,7 +387,7 @@ vector<BallCandidate> findCandidates(const Mat& image, const Mat& tableMask, con
 
     const double CANNY_HIGH = 80;
     Mat edges;
-    Canny(grey, edges, CANNY_HIGH / 2, CANNY_HIGH);
+    Canny(grey, edges, CANNY_HIGH/2, CANNY_HIGH);
     saveStage(name, "3a_edges", edges);
 
     int minRadius = (int)floor(0.85 * g.minRadiusPx);
@@ -397,8 +399,8 @@ vector<BallCandidate> findCandidates(const Mat& image, const Mat& tableMask, con
     HoughCircles(grey, circles, HOUGH_GRADIENT, 1, minDist, CANNY_HIGH, ACCUMULATOR_THRESHOLD, minRadius, maxRadius);
 
     Mat allowed;
-    dilate(tableMask, allowed, getStructuringElement(MORPH_ELLIPSE, Size(oddAtLeast(2 * g.minRadiusPx), oddAtLeast(2 * g.minRadiusPx))));
-
+    dilate(tableMask, allowed, getStructuringElement(MORPH_ELLIPSE, Size(oddAtLeast(2 * g.minRadiusPx), oddAtLeast(2* g.minRadiusPx))));
+    
     vector<BallCandidate> candidates;
     for (const Vec3f& c : circles)
     {
@@ -433,7 +435,7 @@ void drawCandidates(const Mat& image, const vector<BallCandidate>& candidates, c
     4. Candidate Verification
    ===========================================================================================================*/
 /*
-Purpose: Recreates the Hough Edges on a candidate, thickens edge by one pixel so circle thats off
+Purpose: Recreates the Hough Edges on a candidate, thickens edge by one pixel so circle thats off 
 still counts
 */
 Mat makeEdgeImage(const Mat& image, const TableGeometry& g)
@@ -452,7 +454,8 @@ asks what fraction of circle is marked as non cloth
 */
 double foregroundFractionInCircle(const Mat& mask, const Point2f& centre, double radius)
 {
-    Mat circleMask = filledCircleMask(mask.size(), centre, radius);
+    Mat circleMask = Mat::zeros(mask.size(), CV_8U);
+    circle(circleMask, centre, cvRound(radius), Scalar(255), FILLED);
     int inside = countNonZero(circleMask);
     if (inside == 0) return 0;
     return (double)countNonZero(mask & circleMask) / inside;
@@ -526,7 +529,7 @@ vector<BallCandidate> verifyCandidates(const vector<BallCandidate>& candidates, 
         passed.push_back(b);
     }
 
-    stable_sort(passed.begin(), passed.end(), [](const BallCandidate& a, const BallCandidate& b) { return a.score > b.score; });
+    stable_sort(passed.begin(), passed.end(), [](const BallCandidate& a, const BallCandidate& b){return a.score > b.score;});
 
     vector<BallCandidate> balls;
     for (const BallCandidate& b : passed)
@@ -534,7 +537,7 @@ vector<BallCandidate> verifyCandidates(const vector<BallCandidate>& candidates, 
         bool duplicate = false;
         for (const BallCandidate& kept : balls)
         {
-            if (norm(b.tablePos - kept.tablePos) < BALL_RADIUS_MM) {
+            if (norm(b.tablePos - kept.tablePos) < BALL_RADIUS_MM){
                 duplicate = true;
                 break;
             }
@@ -562,20 +565,21 @@ BallFeatures extractFeatures(const Mat& lab, const Point2f& centre, double radiu
     const double SAMPLE_FRACTION = 0.75;
     const int WHITE_MIN_LIGHTNESS = 150;
 
-    Mat circleMask = filledCircleMask(lab.size(), centre, SAMPLE_FRACTION * radiusPx);
+    Mat circleMask = Mat::zeros(lab.size(), CV_8U);
+    circle(circleMask, centre, cvRound(SAMPLE_FRACTION * radiusPx), Scalar(255), FILLED);
 
     vector<uchar> L, A, B;
     int total = 0, white = 0;
     for (int r = 0; r < lab.rows; r++)
         for (int c = 0; c < lab.cols; c++)
         {
-            if (!circleMask.at<uchar>(r, c)) continue;
-            const Vec3b& p = lab.at<Vec3b>(r, c);
+            if (!circleMask.at<uchar>(r,c)) continue;
+            const Vec3b& p = lab.at<Vec3b>(r,c);
             total++;
             if (chromaOf(p) < whiteChromaThreshold && p[0] > WHITE_MIN_LIGHTNESS) white++;
             else { L.push_back(p[0]); A.push_back(p[1]); B.push_back(p[2]); }
         }
-
+    
     BallFeatures f;
     f.whiteFraction = total ? (double)white / total : 0;
 
@@ -589,7 +593,7 @@ BallFeatures extractFeatures(const Mat& lab, const Point2f& centre, double radiu
         f.colour = Vec3d(255, 128, 128); // all white; cue ball
     else
         f.colour = Vec3d(median(L), median(A), median(B));
-
+    
     return f;
 }
 
@@ -605,10 +609,11 @@ BallClassifier trainClassifier(const Mat& image, const vector<BallCandidate>& ba
         int t = match.detectionToTruth[d];
         if (t < 0 || truth[t].number != 0) continue;
         vector<double> chroma;
-        Mat circleMask = filledCircleMask(lab.size(), balls[d].imagePos, 0.75 * balls[d].expectedRadiusPx);
+        Mat circleMask = Mat::zeros(lab.size(), CV_8U);
+        circle(circleMask, balls[d].imagePos, cvRound(0.75 * balls[d].expectedRadiusPx), Scalar(255), FILLED);
         for (int r = 0; r < lab.rows; r++)
             for (int c = 0; c < lab.cols; c++)
-                if (circleMask.at<uchar>(r, c)) chroma.push_back(chromaOf(lab.at<Vec3b>(r, c)));
+                if (circleMask.at<uchar>(r, c)) chroma.push_back(chromaOf(lab.at<Vec3b>(r,c)));
         stable_sort(chroma.begin(), chroma.end());
         classifier.whiteChromaThreshold = chroma[(size_t)(0.99 * (chroma.size() - 1))];
     }
@@ -663,10 +668,11 @@ void classifyBalls(vector<BallCandidate>& balls, const Mat& image, const BallCla
     6. Evaluation
    ===========================================================================================================*/
 /*
-Purpose: get ground truth from excel.
+Purpose: get ground truth from excel. 
 Corrections to the spreadsheet (documented in the report):
 Table1 balls 2, 4 and 11 were entered as (column, row) - their row values (1212, 1050, 1169)
 are larger than the table height (683), so they have been swapped back.
+Corrected values prepared with help from ChatGPT (pool_ball_coordinates.json) - acknowledge this.
 AllBalls balls 11-15: checking the labels against the numbers printed on the balls shows the
 spreadsheet has them in the wrong order. Spreadsheet -> actual: (1130,334) is 13 not 11,
 (1013,335) is 11 not 12, (1067,336) is 12 not 13, (1245,342) is 15 not 14, (1187,345) is 14 not 15.
@@ -715,12 +721,12 @@ vector<GroundTruthBall> getGroundTruth(const string& name)
         GroundTruthBall t;
         t.number = (ball == 15) ? 0 : ball + 1;
         t.tablePos = Point2f((float)x, (float)y);
-
+        
         // every pos should be on table
         if (x >= TABLE_WIDTH_MM || y >= TABLE_HEIGHT_MM)
-            cout << "Ground Truth Warning: " << name << " ball " << t.number << " (" << x << ", " << y <<
+            cout << "Ground Truth Warning: " << name << " ball " << t.number << " (" << x << ", " << y << 
             ") is outside the table" << endl;
-
+        
         truth.push_back(t);
     }
 
@@ -729,9 +735,9 @@ vector<GroundTruthBall> getGroundTruth(const string& name)
         for (size_t j = i+1; j < truth.size(); j++)
             if (norm(truth[i].tablePos - truth[j].tablePos) < 2 * BALL_RADIUS_MM * 0.9)
                 cout << "Ground Truth Warning: " << name << " balls " << truth[i].number << " and "
-                << truth[j].number << " are only " << norm(truth[i].tablePos - truth[j].tablePos)
+                << truth[j].number << " are only " << norm(truth[i].tablePos - truth[j].tablePos) 
                 << " mm apart (physically impossible)" << endl;
-
+    
     return truth;
 }
 
@@ -775,7 +781,7 @@ EvaluationResult evaluateDetections(const vector<BallCandidate>& balls, const ve
     // picture for my report :). green = correct (line to gt), red = fp, yellow = missed ball
     Mat vis = rectified.clone();
     int rad = (int)BALL_RADIUS_MM;
-    for (int t = 0; t < (int)truth.size(); t++)
+    for(int t = 0; t < (int)truth.size(); t++)
     {
         string label = truth[t].number == 0 ? "W" : to_string(truth[t].number);
         if (gtMatch[t] == -1) // missed ball
@@ -787,7 +793,7 @@ EvaluationResult evaluateDetections(const vector<BallCandidate>& balls, const ve
     {
         if (detMatch[d] == -1) // FP
             circle(vis, balls[d].tablePos, rad, Scalar(0, 0, 255), 3);
-        else {
+        else{
             circle(vis, balls[d].tablePos, rad, Scalar(0, 255, 0), 2);
             line(vis, balls[d].tablePos, truth[detMatch[d]].tablePos, Scalar(255, 255, 255), 1);
         }
@@ -855,14 +861,14 @@ void printRecognition(const string& label, const RecognitionResult& r, bool show
 {
     double accuracy = r.classified ? (double)r.correct / r.classified : 0;
     double endToEnd = r.truthCount ? (double)r.correct / r.truthCount : 0;
-    printf("%s: recognised %d/%d correctly (accuracy=%.3f) | end-to-end %d/%d (%.3f)\n",
+    printf("%s: recognised %d/%d correctly (accuracy=%.3f) | end-to-end %d/%d (%.3f)\n", 
             label.c_str(), r.correct, r.classified, accuracy, r.correct, r.truthCount, endToEnd);
     if (!showConfusion) return;
 
     cout << "Confusion matrix (row = true ball, columns = predicted, W = white):" << endl << "    ";
     for (int c = 0; c < 16; c++) printf("%3s", c == 0? "W" : to_string(c).c_str());
     cout << endl;
-    for (int row = 0; row < 16; row++) {
+    for (int row = 0; row < 16; row++){
         printf("%4s ", row == 0 ? "W" : to_string(row).c_str());
         for (int c = 0; c < 16; c++)
         {
@@ -884,16 +890,6 @@ void printRecognition(const string& label, const RecognitionResult& r, bool show
 /* ===========================================================================================================
    7. General Utilities
    ===========================================================================================================*/
-/*
-Purpose: makes a filled white circle on a black mask, for sampling the pixels inside a ball
-*/
-Mat filledCircleMask(const Size& size, const Point2f& centre, double radius)
-{
-    Mat mask = Mat::zeros(size, CV_8U);
-    circle(mask, centre, cvRound(radius), Scalar(255), FILLED);
-    return mask;
-}
-
 /*
 Purpose: saves any intermediate image with a consistent name, like Table1_2f_mask.png
 This is to help me with making the report.
